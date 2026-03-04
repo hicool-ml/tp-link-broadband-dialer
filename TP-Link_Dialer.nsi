@@ -1,13 +1,16 @@
 ; TP-Link Broadband Dialer Tool - Installer Script
 ; Compiled with NSIS (Nullsoft Scriptable Install System)
-; Encoding: ANSI
+; Encoding: ANSI (save as UTF-8 with BOM for Unicode)
+
+; Enable Unicode support (required for Chinese characters)
+Unicode true
 
 ; Application Information
-!define APP_NAME "Broadband Dialer"
+!define APP_NAME "宽带拨号"
 !define APP_VERSION "1.0.0"
 !define APP_PUBLISHER "Kilo Code"
 !define APP_EXE "TP-Link_Dialer.exe"
-!define APP_DIR "Broadband_Dialer"
+!define APP_DIR "BroadbandDialer"
 !define APP_ICON "app.ico"
 
 ; Installer Configuration
@@ -72,9 +75,9 @@ Section "Main Program" SecMain
   
   ; Create start menu shortcuts
   DetailPrint "Creating start menu shortcuts..."
-  CreateDirectory "$SMPROGRAMS\Broadband Connection"
-  CreateShortCut "$SMPROGRAMS\Broadband Connection\Broadband Connection.lnk" "$INSTDIR\TP-Link_Dialer\${APP_EXE}" "" "$INSTDIR\${APP_ICON}" 0
-  CreateShortCut "$SMPROGRAMS\Broadband Connection\Uninstall.lnk" "$INSTDIR\uninstall.exe"
+  CreateDirectory "$SMPROGRAMS\Broadband Dialer"
+  CreateShortCut "$SMPROGRAMS\Broadband Dialer\Broadband Connection.lnk" "$INSTDIR\TP-Link_Dialer\${APP_EXE}" "" "$INSTDIR\${APP_ICON}" 0
+  CreateShortCut "$SMPROGRAMS\Broadband Dialer\Uninstall.lnk" "$INSTDIR\uninstall.exe"
   
   ; Write registry entries
   DetailPrint "Writing registry entries..."
@@ -113,7 +116,7 @@ Section "Uninstall"
   ; Delete shortcuts
   DetailPrint "Deleting shortcuts..."
   Delete "$DESKTOP\Broadband Connection.lnk"
-  RMDir /r "$SMPROGRAMS\Broadband Connection"
+  RMDir /r "$SMPROGRAMS\Broadband Dialer"
   
   ; Delete registry entries
   DetailPrint "Cleaning registry..."
