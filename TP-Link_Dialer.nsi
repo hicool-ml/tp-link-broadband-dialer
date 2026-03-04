@@ -2,9 +2,6 @@
 ; Compiled with NSIS (Nullsoft Scriptable Install System)
 ; Encoding: ANSI
 
-; Get environment variables
-!define LOCALAPPDATA $%LOCALAPPDATA%
-
 ; Application Information
 !define APP_NAME "Broadband Dialer"
 !define APP_VERSION "1.0.0"
@@ -28,10 +25,6 @@ ShowUninstDetails show
 
 !define MUI_ABORTWARNING
 !define MUI_COMPONENTSPAGE_NODESC
-
-; Language Strings for Chinese
-LangString DESC_APP_NAME 2052 "宽带拨号工具"
-LangString DESC_SHORTCUT 2052 "宽带拨号工具"
 
 ; License Data
 LicenseData "license.txt"
@@ -58,8 +51,8 @@ Section "Main Program" SecMain
   
   DetailPrint "Copying program files..."
   
-  ; Copy main executable
-  File "dist\${APP_EXE}"
+  ; Copy entire dist directory (onedir mode)
+  File /r "dist\TP-Link_Dialer\*.*"
   
   ; Copy icon files
   File "app.ico"
@@ -71,26 +64,17 @@ Section "Main Program" SecMain
   ; Copy documentation
   File "license.txt"
   
-  ; Copy Playwright browser drivers
-  DetailPrint "Copying Playwright browser drivers..."
-  SetOutPath $INSTDIR\playwright-drivers
-  File /r "${LOCALAPPDATA}\ms-playwright\chromium-1208\*.*"
-  
-  ; Set environment variable for Playwright browsers path
-  DetailPrint "Configuring Playwright browser path..."
-  WriteRegStr HKLM "SYSTEM\CurrentControlSet\Control\Session Manager\Environment" "PLAYWRIGHT_BROWSERS_PATH" "$INSTDIR\playwright-drivers"
-  
   SetOutPath $INSTDIR
   
   ; Create desktop shortcut
   DetailPrint "Creating desktop shortcut..."
-  CreateShortCut "$DESKTOP\宽带拨号.lnk" "$INSTDIR\${APP_EXE}" "" "$INSTDIR\${APP_ICON}" 0
+  CreateShortCut "$DESKTOP\宽带连接.lnk" "$INSTDIR\TP-Link_Dialer\${APP_EXE}" "" "$INSTDIR\${APP_ICON}" 0
   
   ; Create start menu shortcuts
   DetailPrint "Creating start menu shortcuts..."
-  CreateDirectory "$SMPROGRAMS\宽带拨号工具"
-  CreateShortCut "$SMPROGRAMS\宽带拨号工具\宽带拨号.lnk" "$INSTDIR\${APP_EXE}" "" "$INSTDIR\${APP_ICON}" 0
-  CreateShortCut "$SMPROGRAMS\宽带拨号工具\卸载.lnk" "$INSTDIR\uninstall.exe"
+  CreateDirectory "$SMPROGRAMS\宽带连接"
+  CreateShortCut "$SMPROGRAMS\宽带连接\宽带连接.lnk" "$INSTDIR\TP-Link_Dialer\${APP_EXE}" "" "$INSTDIR\${APP_ICON}" 0
+  CreateShortCut "$SMPROGRAMS\宽带连接\卸载.lnk" "$INSTDIR\uninstall.exe"
   
   ; Write registry entries
   DetailPrint "Writing registry entries..."
@@ -113,7 +97,11 @@ SectionEnd
 Section "Uninstall"
   ; Delete files
   DetailPrint "Deleting program files..."
-  Delete "$INSTDIR\${APP_EXE}"
+  
+  ; Delete entire dist directory
+  RMDir /r "$INSTDIR\TP-Link_Dialer"
+  
+  ; Delete icon files
   Delete "$INSTDIR\${APP_ICON}"
   Delete "$INSTDIR\connecting.ico"
   Delete "$INSTDIR\error.ico"
@@ -122,18 +110,10 @@ Section "Uninstall"
   Delete "$INSTDIR\license.txt"
   Delete "$INSTDIR\uninstall.exe"
   
-  ; Delete Playwright browser drivers
-  DetailPrint "Deleting Playwright browser drivers..."
-  RMDir /r "$INSTDIR\playwright-drivers"
-  
-  ; Remove environment variable
-  DetailPrint "Removing Playwright browser path environment variable..."
-  DeleteRegValue HKLM "SYSTEM\CurrentControlSet\Control\Session Manager\Environment" "PLAYWRIGHT_BROWSERS_PATH"
-  
   ; Delete shortcuts
   DetailPrint "Deleting shortcuts..."
-  Delete "$DESKTOP\宽带拨号.lnk"
-  RMDir /r "$SMPROGRAMS\宽带拨号工具"
+  Delete "$DESKTOP\宽带连接.lnk"
+  RMDir /r "$SMPROGRAMS\宽带连接"
   
   ; Delete registry entries
   DetailPrint "Cleaning registry..."
