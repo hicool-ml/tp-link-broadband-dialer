@@ -29,6 +29,10 @@ ShowUninstDetails show
 !define MUI_ABORTWARNING
 !define MUI_COMPONENTSPAGE_NODESC
 
+; Language Strings for Chinese
+LangString DESC_APP_NAME 2052 "宽带拨号工具"
+LangString DESC_SHORTCUT 2052 "宽带拨号工具"
+
 ; License Data
 LicenseData "license.txt"
 
@@ -80,13 +84,13 @@ Section "Main Program" SecMain
   
   ; Create desktop shortcut
   DetailPrint "Creating desktop shortcut..."
-  CreateShortCut "$DESKTOP\${APP_NAME}.lnk" "$INSTDIR\${APP_EXE}" "" "$INSTDIR\${APP_ICON}" 0
+  CreateShortCut "$DESKTOP\$(DESC_SHORTCUT).lnk" "$INSTDIR\${APP_EXE}" "" "$INSTDIR\${APP_ICON}" 0
   
   ; Create start menu shortcuts
   DetailPrint "Creating start menu shortcuts..."
-  CreateDirectory "$SMPROGRAMS\${APP_NAME}"
-  CreateShortCut "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk" "$INSTDIR\${APP_EXE}" "" "$INSTDIR\${APP_ICON}" 0
-  CreateShortCut "$SMPROGRAMS\${APP_NAME}\Uninstall.lnk" "$INSTDIR\uninstall.exe"
+  CreateDirectory "$SMPROGRAMS\$(DESC_APP_NAME)"
+  CreateShortCut "$SMPROGRAMS\$(DESC_APP_NAME)\$(DESC_SHORTCUT).lnk" "$INSTDIR\${APP_EXE}" "" "$INSTDIR\${APP_ICON}" 0
+  CreateShortCut "$SMPROGRAMS\$(DESC_APP_NAME)\Uninstall.lnk" "$INSTDIR\uninstall.exe"
   
   ; Write registry entries
   DetailPrint "Writing registry entries..."
@@ -128,8 +132,8 @@ Section "Uninstall"
   
   ; Delete shortcuts
   DetailPrint "Deleting shortcuts..."
-  Delete "$DESKTOP\${APP_NAME}.lnk"
-  RMDir /r "$SMPROGRAMS\${APP_NAME}"
+  Delete "$DESKTOP\$(DESC_SHORTCUT).lnk"
+  RMDir /r "$SMPROGRAMS\$(DESC_APP_NAME)"
   
   ; Delete registry entries
   DetailPrint "Cleaning registry..."
