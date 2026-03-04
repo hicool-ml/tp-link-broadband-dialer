@@ -2,6 +2,9 @@
 ; Compiled with NSIS (Nullsoft Scriptable Install System)
 ; Encoding: ANSI
 
+; Get environment variables
+!define LOCALAPPDATA $%LOCALAPPDATA%
+
 ; Application Information
 !define APP_NAME "TP-Link宽带拨号"
 !define APP_VERSION "1.0.0"
@@ -67,7 +70,7 @@ Section "Main Program" SecMain
   ; Copy Playwright browser drivers
   DetailPrint "Copying Playwright browser drivers..."
   SetOutPath $INSTDIR\playwright-drivers
-  File /r "%LOCALAPPDATA%\ms-playwright\chromium-1208\*.*"
+  File /r "${LOCALAPPDATA}\ms-playwright\chromium-1208\*.*"
   
   ; Set environment variable for Playwright browsers path
   DetailPrint "Configuring Playwright browser path..."
