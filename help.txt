@@ -1,0 +1,1254 @@
+这是我写的一个tplink路由器账号写入python脚本:
+from playwright.sync_api import sync_playwright
+import time
+
+
+def main():
+    broadband_user = input("请输入宽带账号: ")
+    broadband_pass = input("请输入宽带密码: ")
+
+    router_password = "Cdu@123"  # 改成你的管理员密码
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=False)
+        context = browser.new_context()
+        page = context.new_page()
+
+        print("正在打开路由器后台...")
+        page.goto("http://tplogin.cn/", timeout=30000)
+
+        # ===== 登录路由器 =====
+        page.wait_for_selector("input[type='password']")
+        page.fill("input[type='password']", router_password)
+        page.keyboard.press("Enter")
+
+        print("正在等待后台加载...")
+        page.wait_for_timeout(3000)
+
+        # ===== 直接跳转 PPPoE 页面 =====
+        page.goto("http://tplogin.cn/PPPoE.htm", timeout=30000)
+
+        page.wait_for_selector("#name")
+
+        print("正在填写宽带账号密码...")
+
+        page.fill("#name", broadband_user)
+        page.fill("#psw", broadband_pass)
+
+        time.sleep(1)
+
+        print("正在点击连接按钮...")
+
+        # 连接按钮 id = save
+        page.click("#save")
+
+        print("已提交拨号请求，等待状态刷新...")
+
+        time.sleep(10)
+
+        print("完成。请观察路由器是否成功拨号。")
+
+        context.close()
+        browser.close()
+
+
+if __name__ == "__main__":
+    main()
+
+目前情况是路由器可以正常登录，但是还无法实现账号录入功能，登录后应该依次访问：
+BasicRouteSet.htm  对应“路由设置”
+↓
+WanCfg.htm  对应  “上网设置”
+↓
+PPPoE.htm   对应  “宽带拨号上网”  方式
+
+
+PPPoE.htm代码如下，此时只需要将用户填写的账号密码录入，点击连接既可以完成上网：
+
+<div id="hcCo" class="hcCo">
+    <div class="title">
+        <label class="title">{%label.basicSet%}</label>
+        <i class="helpBtn" helpStr="PPPoEHelp"></i>
+    </div>
+    <div class="block">
+        <div id="wanPortSelDiv" class="disNone">
+            <ul class="gridLine gridLineA wanSel">
+                <label class="desLblA">{%label.wanPortSel%}</label>
+                <li class="textConA textCon">
+                    <span id="wanPortSel" class="select">
+                        <span class="value hsValueA"></span>
+                        <i class="arrow"></i>
+                    </span>
+                </li>
+            </ul>
+            <ul class="gridLine gridLineA wanSelTips">
+                <label class="desLblA"></label>
+                <span>
+                    此时<span id="wanPortSelected"></span>
+                    作为LAN1口
+                </span>
+            </ul>
+        </div>
+        <ul class="gridLine gridLineA">
+            <label class="desLblA">{%label.netMode%}</label>
+            <li class="textConA textCon">
+                <span id="wanSel" class="select">
+                    <span class="value hsValueA"></span>
+                    <i class="arrow"></i>
+                </span>
+            </li>
+        </ul>
+        <ul class="gridLine gridLineA">
+            <label class="desLblA">{%label.netAccount%}</label>
+            <li class="textConA textCon">
+                <input id="name" class="textA text hoverBd" maxLength="118"/>
+                <i class="tip"></i>
+            </li>
+        </ul>
+        <ul class="gridLine gridLineA">
+            <label class="desLblA">{%label.netPwd%}</label>
+            <li class="textConA textCon">
+                <input id="psw" class="textA text hoverBd" type="text" maxLength="118"/>
+                <i class="tip"></i>
+            </li>
+        </ul>
+        <ul class="gridLine gridLineA mpPhoneRgt15">
+            <label class="desLblA">{%label.ipAddr%}</label>
+            <label id="wanIpLbl" class="noteLbl">0.0.0.0</label>
+        </ul>
+        <ul class="gridLine gridLineA mpPhoneRgt10">
+            <label class="desLblA">{%label.dns%}</label>
+            <label id="wanDnsLbl" class="noteLbl">0.0.0.0</label>
+        </ul>
+        <ul id="onlineTimeUl" class="gridLine gridLineA mpPhoneRgt10">
+            <label class="desLblA">{%label.onlineTime%}</label>
+            <label id="onlineTimeLbl" class="noteLbl"></label>
+        </ul>
+        <div class="blockFuncA">
+            <input id="disconnect" type="button" value="{%btn.disconnect%}" class="btnA subBtn"/>
+            <input id="save" type="button" value="{%btn.connect%}" class="btnA subBtn"/>
+        </div>
+        <ul id="wanStatus" class="gridLine gridLineA gridStatus">
+            <i></i>
+            <label id="wanStatusLbl" class="noteLbl"></label>
+            <a id="pppoeSolution" href="javascript:void(0)">{%label.lookUpSolution%}</a>
+        </ul>
+    </div>
+    <div id="wanSetDiv" class="disNone">
+        <div class="title">
+            <label class="title">{%menuStr.wanSet%}</label>
+        </div>
+        <div class="block">
+            <p class="tips">{%label.wanSetTips%}</p>
+            <div class="wanSetCon">
+                <div class="wanSetTitle">{%label.wanSet%}</div>
+                <div class="radioBtnCon">
+                    <div>
+                        <input id="wanSetAuto" type="radio" class="switchRadio" name="wanSetRadio"/>
+                        <label for="wanSetAuto" class="radioLbl">{%label.wanSetAuto%}</label>
+                        <p class="des">{%label.wanSetAutoTips%}</p>
+                    </div>
+                    <div>
+                        <input id="wanSetFixed" type="radio" class="switchRadio" name="wanSetRadio"/>
+                        <label for="wanSetFixed" class="radioLbl">{%label.wanSetFixed%}</label>
+                        <p id="wanSetFixedTip" class="des">{%label.wanSetFixedTips%}</p>
+                    </div>
+                </div>
+                <div class="sampleImgCon">
+                    <img id="sampleImg" usemap="#wanPortMap">
+                    <map name="wanPortMap" id="wanPortMap"></map>
+                </div>
+                <div class="wanPortTopWrapper">
+                    <div class="wanPortWrapper">
+                        <p id="selectWanPort">{%label.selectWan%}</p>
+                        <div class="wanDisplayContainer"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="blockFuncA">
+                <input id="wanSetBtn" type="button" value="{%btn.save%}" class="btnA subBtn"/>
+            </div>
+        </div>
+    </div>
+    <div class="title">
+        <label class="title">{%label.highSet%}</label>
+        <i class="helpBtn" helpStr="PPPoEAdvHelp"></i>
+    </div>
+    <div class="block">
+        <ul class="gridLine gridLineA">
+            <label class="desLblA">{%label.dialMode%}</label>
+            <li class="textConA textCon">
+                <span id="wanDialSel" class="select">
+                    <span class="value hsValueA"></span>
+                    <i class="arrow"></i>
+                </span>
+            </li>
+        </ul>
+        <ul class="gridLine gridLineA">
+            <label class="desLblA">{%label.linkMode%}</label>
+            <li class="textConA textCon">
+                <span id="wanLinkSel" class="select">
+                    <span class="value hsValueA"></span>
+                    <i class="arrow"></i>
+                </span>
+            </li>
+        </ul>
+        <!--ul id="ulOffTime" class="gridLine gridLineA">
+			<label class="desLblA">{%label.offTime%}</label>
+			<li class="textConB textCon"><input id="offTime" class="textB text hoverBd" maxLength="2" /></li>
+			<label class="noteLbl">{%label.minute%}{%label.offTimeComment%}</label>
+		</ul-->
+        <ul class="gridLine gridLineA">
+            <label class="desLblA">{%label.mtu%}</label>
+            <li class="textConB textCon">
+                <input id="mtu" class="textB text hoverBd" maxLength="4"/>
+            </li>
+            <label class="noteLbl">{%label.pppoeMtuComment%}</label>
+        </ul>
+        <ul class="gridLine gridLineA">
+            <label class="desLblA">{%label.svcName%}</label>
+            <li class="textConA textCon">
+                <input id="svcName" class="textA text hoverBd" maxLength="128"/>
+                <i class="tip"></i>
+            </li>
+        </ul>
+        <ul class="gridLine gridLineA">
+            <label class="desLblA">{%label.acName%}</label>
+            <li class="textConA textCon">
+                <input id="acName" class="textA text hoverBd" maxLength="128"/>
+                <i class="tip"></i>
+            </li>
+        </ul>
+        <ul class="gridLine gridLineA" id="wanRateSelUl">
+            <label class="desLblA">{%label.wanRateSet%}</label>
+            <li class="textConA textCon">
+                <span id="wanRateSel" class="select">
+                    <span class="value hsValueA"></span>
+                    <i class="arrow"></i>
+                </span>
+            </li>
+            <label class="negoRate disNone"></label>
+        </ul>
+        <ul class="gridLine gridLineA">
+            <label class="desLblA">{%label.wanMac%}</label>
+            <li class="textConA textCon">
+                <span id="wanMacSel" class="select">
+                    <span class="value hsValueA"></span>
+                    <i class="arrow"></i>
+                </span>
+            </li>
+        </ul>
+        <ul id="macCloneUl" class="gridLine gridLineA">
+            <li class="textConAL textCon">
+                <input id="wanMac" class="textA text hoverBd" maxLength="17"/>
+                <i class="tip"></i>
+            </li>
+            <li class="textConAL macCloneLi"></li>
+        </ul>
+        <ul class="gridLine gridLineA disNone" id="onlineCheckUl">
+            <label class="desLblA">{%label.onlineCheckMode%}</label>
+            <li class="textConA textCon">
+                <span id="onlineCheckSel" class="select">
+                    <span class="value hsValueA"></span>
+                    <i class="arrow"></i>
+                </span>
+            </li>
+        </ul>
+        <ul class="gridLine gridLineA disNone" id="pingAddrUl">
+            <label class="desLblA">{%label.pingAddr%}</label>
+            <li class="textConA textCon">
+                <input id="pingAddr" class="textA text hoverBd" maxLength="15"/>
+                <i class="tip"></i>
+            </li>
+            <li id="pingAddrNote" class="note">
+                <i class="warn"></i>
+                <div class="noteCon noteConRouteSet">
+                    <p id="pingAddrNoteLine"></p>
+                </div>
+            </li>
+        </ul>
+        <ul class="gridLine gridLineA disNone" id="dnsAddrUl">
+            <label class="desLblA">{%label.dnsAddr%}</label>
+            <li class="textConA textCon">
+                <input id="dnsAddr" class="textA text hoverBd" maxLength="15"/>
+                <i class="tip"></i>
+            </li>
+            <li id="dnsAddrNote" class="note">
+                <i class="warn"></i>
+                <div class="noteCon noteConRouteSet">
+                    <p id="dnsAddrNoteLine"></p>
+                </div>
+            </li>
+        </ul>
+        <div class="blockFuncA">
+            <input id="saveHighSet" type="button" value="{%btn.save%}" class="btnA subBtn"/>
+        </div>
+    </div>
+</div>
+<script type="text/javascript">
+    function init() {
+        function z(d, a) {
+            var c = "";
+            switch (d) {
+            case ENONE:
+                return !1;
+            case EPPPOEUSER:
+                c = errStr.pppoeUserErr;
+                break;
+            case EPPPOEPWD:
+                c = errStr.pppoePwdErr;
+                break;
+            case EINVMTU:
+                c = errStr.pppoeMtuErr;
+                break;
+            case EINVNET:
+                c = errStr.ipAddrNetErr;
+                break;
+            case EINVIP:
+                c = errStr.ipAddrErr;
+                break;
+            case EINVIPFMT:
+                c = errStr.ipAddrFmtErr;
+                break;
+            case EINVGROUPIP:
+                c = errStr.ipAddrGroupErr;
+                break;
+            case EINVLOOPIP:
+                c = errStr.ipAddrLoopErr;
+                break;
+            case ECOMFLICTNET:
+                c = errStr.ispIpLanConflict;
+                break;
+            case EINVFDNSVR:
+                c = errStr.primDnsErr;
+                break;
+            case EINVSDNSVR:
+                c = errStr.seDnsErr;
+                break;
+            case EINVTIME:
+                c = errStr.pppoeOffTimeErr;
+                break;
+            case ENOLINK:
+                c = errStr.wanLinkDown;
+                break;
+            case ECONFLICTLANMAC:
+                c = errStr.lanWanMacConflict;
+                break;
+            case ECONFLICTWANMAC:
+                c = errStr.mulWanMacConflict;
+                break;
+            case ECONFLICTWANGATEWAY:
+                c = errStr.wanIpGateConflict;
+                break;
+            case ECONFLICTIPWANDNS:
+                c = errStr.wanIpDnsConflict;
+                break;
+            case ECONFLICTGATEWAYWANIP:
+                c = errStr.gateIpConflict;
+                break;
+            case ECONFLICTDNSWANIP:
+                c = errStr.dnsIpConflict;
+                break;
+            default:
+                c = errStr.invRequestFail
+            }
+            showAlert(c, a);
+            return !0
+        }
+        function D(d) {
+            var a, c, b = "";
+            a = parseInt(d / 86400);
+            c = parseInt(d % 86400 / 3600);
+            d = parseInt(d % 3600 / 60);
+            0 < a && (b = a + label.dayT);
+            return b += c + label.lHour + d + label.minuteT
+        }
+        function E(d) {
+            var a = null
+              , a = dualWanOpen && 1 != currentSelectedWan ? d[uciNetwork.fileName][uciNetwork.dynData.wanStatus + "_" + currentSelectedWan] : d[uciNetwork.fileName][uciNetwork.dynData.wanStatus];
+            if (a.proto != uciProto.optValue.proto.pppoe)
+                clearTimeout(m);
+            else {
+                d = "none";
+                var c = id("pppoeSolution")
+                  , b = "none"
+                  , h = id("onlineTimeUl")
+                  , f = a.error_code
+                  , n = a[uciNetwork.optName.ip] || "0.0.0.0"
+                  , g = a[uciNetwork.optName.priDns] || "0.0.0.0"
+                  , k = a[uciNetwork.optName.sndDns] || "0.0.0.0"
+                  , l = a[uciNetwork.optName.upTime] || 0
+                  , q = parseInt(a.link_status);
+                switch (q) {
+                case LINK_DOWN:
+                case LINKING_UP:
+                    disableBtn("disconnect", LINK_DOWN == q);
+                    b = "none";
+                    id("wanIpLbl").innerHTML = "0.0.0.0";
+                    id("wanDnsLbl").innerHTML = "0.0.0.0";
+                    n = LINK_DOWN == q ? "error" : "link";
+                    0 == parseInt(a[uciNetwork.optName.phyStatus]) && (f = LINK_CODE_PHYDOWN);
+                    if (LINK_CODE_MANUAL != f && LINK_CODE_NORMAL != f && LINK_CODE_INET_ERR != f && LINK_CODE_PPPOEv4_SWITCH != f)
+                        switch (d = "inline-block",
+                        hsStatSet(n, linkStatus[q] + label.lBrackets + linkCode[f] + label.rBrackets),
+                        f) {
+                        case LINK_CODE_NOECHO:
+                            helpBind(c, "PPPoEServerDeadHelp");
+                            break;
+                        case LINK_CODE_AUTH_ERR:
+                            helpBind(c, "PPPoENPErrHelp");
+                            break;
+                        case LINK_CODE_UNKNOWN:
+                        case LINK_CODE_DENY:
+                        case LINK_CODE_SRVDOWN:
+                        case LINK_CODE_OPT_UNSUPPORT:
+                        case LINK_CODE_AUTH_UNSUPPORT:
+                            helpBind(c, "PPPoEOtherErrHelp");
+                            break;
+                        default:
+                            c.onclick = null,
+                            d = "none"
+                        }
+                    else
+                        hsStatSet(n, linkStatus[q]);
+                    break;
+                case LINK_UP:
+                    id("wanIpLbl").innerHTML = n;
+                    "0.0.0.0" == g && "0.0.0.0" == k ? id("wanDnsLbl").innerHTML = " " + label.dnsException : id("wanDnsLbl").innerHTML = g + " , " + k;
+                    disableBtn("disconnect", !1);
+                    id("onlineTimeLbl").innerHTML = D(l);
+                    b = "block";
+                    hsStatSet("correct", linkStatus[LINK_UP]);
+                    break;
+                case LINKING_DOWN:
+                    id("wanIpLbl").innerHTML = "0.0.0.0",
+                    id("wanDnsLbl").innerHTML = "0.0.0.0",
+                    disableBtn("disconnect", !0),
+                    id("onlineTimeLbl").innerHTML = D(l),
+                    b = "block",
+                    hsStatSet("link", linkStatus[LINKING_DOWN])
+                }
+                c.style.display = d;
+                h.style.display = b
+            }
+        }
+        function F(d) {
+            "manual" == d ? ($("#pingAddrUl").removeClass("disNone"),
+            $("#dnsAddrUl").removeClass("disNone")) : ($("#pingAddrUl").addClass("disNone"),
+            $("#dnsAddrUl").addClass("disNone"))
+        }
+        function w() {
+            var d = {}
+              , a = {}
+              , c = {}
+              , b = {};
+            d[v] = a;
+            a[s] = b;
+            a[t] = c;
+            var a = id("name").value
+              , h = id("psw").value;
+            b[R] = uciProto.optValue.proto.pppoe;
+            c[G] = a;
+            c[H] = h;
+            if (gSysModeSupport && !dualWanOpen)
+                switch (d.system = {
+                    sys_mode: {
+                        mode: uciSystem.optValue.sysMode.routerMode
+                    }
+                },
+                gBandNum) {
+                case BAND_1:
+                    d.wireless = {
+                        wlan_wds_2g: {
+                            enable: "0"
+                        }
+                    };
+                    break;
+                case BAND_2:
+                    d.wireless = {
+                        wlan_wds_2g: {
+                            enable: "0"
+                        },
+                        wlan_wds_5g: {
+                            enable: "0"
+                        }
+                    };
+                    break;
+                case BAND_3:
+                    d.wireless = {
+                        wlan_wds_2g: {
+                            enable: "0"
+                        },
+                        wlan_wds_5g_1: {
+                            enable: "0"
+                        },
+                        wlan_wds_5g_4: {
+                            enable: "0"
+                        }
+                    }
+                }
+            setLoadingId("save");
+            hsLoading(!0);
+            $.modify(d, function(a) {
+                a = a[ERR_CODE];
+                ENONE == a ? (curSysMode = uciSystem.optValue.sysMode.routerMode,
+                S()) : m = $.setTimeout(u, 0);
+                return z(a)
+            })
+        }
+        function T(d) {
+            var a = d[v], b = a[s], a = a[t], e;
+            gWanPortDetectSupport && (e = d[uciWanPortDetect.fileName][uciWanPortDetect.secName.config]);
+            if (gSupportWanPortSwap) {
+                gWanPortDetectSupport ? -1 == e[uciWanPortDetect.optName.fixWanPort] ? (k = wanPortIndexList[0],
+                wanPortSelTmp = wanPortIndexList[0]) : (k = e[uciWanPortDetect.optName.fixWanPort],
+                wanPortSelTmp = e[uciWanPortDetect.optName.fixWanPort]) : (k = b[uciProto.optName.port],
+                selectInit("wanPortSel", wanPortDisplayList, k, wanPortSelectChange),
+                wanPortSelectChange(k));
+                var b = b[x] ? b[x] : "auto", h;
+                if (dualWanOpen) {
+                    var f = currentSelectPos[currentSelectedWan - 1];
+                    h = initDynamicPortRate(f, devicePowerPos);
+                    currentSelectHardType[f] ? $("#wanRateSelUl").hide() : $("#wanRateSelUl").show();
+                    b = I(h, b);
+                    selectInit("wanRateSel", h, b)
+                } else
+                    h = initDynamicPortRate(k, devicePowerPos),
+                    b = I(h, b),
+                    selectInit("wanRateSel", h, b),
+                    currentSelectHardType[k] ? $("#wanRateSelUl").hide() : $("#wanRateSelUl").show()
+            } else
+                -1 != e[uciWanPortDetect.optName.fixWanPort] ? (k = e[uciWanPortDetect.optName.fixWanPort],
+                wanPortSelTmp = e[uciWanPortDetect.optName.fixWanPort]) : wanPortSelTmp = k = -1,
+                selectInit("wanRateSel", rateOptions, getWanRateOption(b[x]));
+            gWanPortDetectSupport && !dualWanOpen && ("1" == e[uciWanPortDetect.optName.enable] ? id("wanSetAuto").click() : id("wanSetFixed").click());
+            $("#name").val(a[G]);
+            $("#psw").val(a[H]);
+            $("#mtu").val(a[J]);
+            $("#acName").val(a[K]);
+            $("#svcName").val(a[L]);
+            selectInit("wanLinkSel", U, a[A] ? a[A] : M);
+            selectInit("wanDialSel", N, a[B] ? a[B] : "normal");
+            gSupportNegoRate && ($("#wanRateSelUl .negoRate").removeClass("disNone"),
+            updateWanNegoRate());
+            setMacInfo(d);
+            E(d);
+            gSupportOnlineCheck && (e = "wan" + ("2" == currentSelectedWan ? "_2" : ""),
+            $("#onlineCheckUl").removeClass("disNone"),
+            selectInit("onlineCheckSel", onlineCheckOptions, d.online_check[e].mode, F),
+            F(d.online_check[e].mode),
+            id("pingAddr").value = d.online_check[e].gateway,
+            id("dnsAddr").value = d.online_check[e].dns,
+            $(".onlineCheckHelp").removeClass("disNone"))
+        }
+        function I(b, a) {
+            for (var c = !1, e = 0; e < b.length; e++)
+                b[e].value == a && (c = !0);
+            c || (a = "auto");
+            return a
+        }
+        function C() {
+            var b = {};
+            b[v] = {};
+            b[v][KEY_NAME] = [s, t];
+            b[uciNetwork.fileName] = {};
+            b[uciNetwork.fileName][KEY_NAME] = dualWanOpen && 1 != currentSelectedWan ? [uciNetwork.dynData.wanStatus + "_" + currentSelectedWan, uciNetwork.dynData.ifaceMac] : [uciNetwork.dynData.wanStatus, uciNetwork.dynData.ifaceMac];
+            gWanPortDetectSupport && (b[uciWanPortDetect.fileName] = {},
+            b[uciWanPortDetect.fileName][KEY_NAME] = uciWanPortDetect.secName.config);
+            gSupportOnlineCheck && (b[uciOnlineCheck.fileName] = {},
+            b[uciOnlineCheck.fileName][KEY_NAME] = "wan" + ("2" == currentSelectedWan ? "_2" : ""));
+            $.query(b, T)
+        }
+        function S() {
+            data = dualWanOpen && 1 != currentSelectedWan ? {
+                network: {
+                    change_wan_status: {
+                        proto: "pppoe_" + currentSelectedWan,
+                        operate: "connect"
+                    }
+                }
+            } : {
+                network: {
+                    change_wan_status: {
+                        proto: "pppoe",
+                        operate: "connect"
+                    }
+                }
+            };
+            clearTimeout(m);
+            disableBtn("disconnect", !0);
+            disableBtn("saveHighSet", !0);
+            $.action(data, function(b) {
+                hsLoading(!1, function() {
+                    disableBtn("disconnect", !1);
+                    disableBtn("saveHighSet", !1)
+                });
+                m = $.setTimeout(u, 2E3)
+            })
+        }
+        function u() {
+            var b = {};
+            b[uciNetwork.fileName] = {};
+            b[uciNetwork.fileName][KEY_NAME] = dualWanOpen && 1 != currentSelectedWan ? [uciNetwork.dynData.wanStatus + "_" + currentSelectedWan] : [uciNetwork.dynData.wanStatus];
+            clearTimeout(m);
+            $.query(b, function(a) {
+                E(a);
+                m = $.setTimeout(u, 2E3)
+            })
+        }
+        function V() {
+            var d = {}
+              , a = {};
+            d[uciWanPortDetect.fileName] = {};
+            d[uciWanPortDetect.fileName][uciWanPortDetect.secName.config] = a;
+            a[uciWanPortDetect.optName.enable] = id("wanSetAuto").checked ? uciWanPortDetect.optValue.enable.on : uciWanPortDetect.optValue.enable.off;
+            if (!id("wanSetAuto").checked && gSupportWanPortSwap) {
+                for (var c = -1, e = 0; e < b.length; e++)
+                    if ("active" == b[e].state) {
+                        c = e;
+                        break
+                    }
+                wanPortSelTmp = c;
+                -1 != c && (a[uciWanPortDetect.optName.fixWanPort] = c);
+                var h = id("wanRateSel").value;
+                checkIfWanRateShouldChange(wanPortSelTmp, h) && (h = "auto",
+                d[uciProto.fileName] = {},
+                d[uciProto.fileName][uciProto.secName.wan] = {},
+                d[uciProto.fileName][uciProto.secName.wan][uciProto.optName.rate] = "auto")
+            }
+            setLoadingId("wanSetBtn");
+            hsLoading(!0);
+            $.modify(d, function(a) {
+                a[ERR_CODE] == ENONE ? (hsLoading(!1),
+                !id("wanSetAuto").checked && gSupportWanPortSwap && (k = wanPortSelTmp,
+                a = initDynamicPortRate(wanPortSelTmp, devicePowerPos),
+                id("wanRateSel").resetOptions(a, h)),
+                C()) : (hsLoading(!1),
+                a[ERR_CODE] == EPORTCUSTOMCONFLIC ? gSupportPortManage ? $.query({
+                    port_manage: {
+                        table: "dev_info"
+                    }
+                }, function(a) {
+                    a = a.port_manage.dev_info;
+                    for (var b, c = 0; c < a.length; c++)
+                        "1" == a[c].cap && (b = a[c].phy_info);
+                    b = b[0].role;
+                    a = "";
+                    switch (b.slice(0, 3).toUpperCase()) {
+                    case "WAN":
+                        a = b.toUpperCase();
+                        break;
+                    case "LAN":
+                        a = b.toUpperCase();
+                        break;
+                    case "DOW":
+                        a = "IPTV口";
+                        break;
+                    case "IPT":
+                        a = "IPTV口";
+                        break;
+                    case "LAG":
+                        a = "聚合口";
+                        break;
+                    case "GAM":
+                        a = "游戏专用口";
+                        break;
+                    case "UPL":
+                        a = "IPTV上联口";
+                        break;
+                    default:
+                        a = "LAN"
+                    }
+                    showAlert("该端口已被定义为" + a + '，请先在"' + $("#portSet_rsMenu .menuLbl").html() + '"中关闭该功能口设置')
+                }) : showAlert('该端口已被定义为其他功能口，请先在"' + $("#portSet_rsMenu .menuLbl").html() + '"中关闭该功能口设置') : a[ERR_CODE] == ECONFLICTUNFIXWANMODE ? showAlert(errStr.wanModeUnfixConflict) : showAlert(errStr.invRequestFailTrylater))
+            })
+        }
+        function W(d) {
+            switch (d.state) {
+            case "active":
+                for (var a = 0; a < b.length; a++)
+                    "active" == b[a].state && a != d.index && (b[a].state = "normal");
+                l.refresh()
+            }
+        }
+        function X(d) {
+            switch (d.state) {
+            case "normal":
+                b[d.index].name = "LAN";
+                l.refresh();
+                break;
+            case "active":
+                for (var a = 0; a < b.length; a++)
+                    "active" == b[a].state && a != d.index && (b[a].state = "normal",
+                    b[a].name = "LAN");
+                b[d.index].name = "WAN";
+                l.refresh()
+            }
+        }
+        function r(b) {
+            var a = ethLayoutList.split("-")
+              , c = "";
+            switch (a.slice(0, a.length)[b]) {
+            case "1":
+                c = "10M";
+                break;
+            case "2":
+                c = "100M";
+                break;
+            case "3":
+                c = "GE";
+                break;
+            case "4":
+                c = "2.5GE";
+                break;
+            case "5":
+                c = "10GE"
+            }
+            return c
+        }
+        function O(d) {
+            $.query({
+                port_manage: {
+                    table: "dev_info"
+                }
+            }, function(a) {
+                var c = !1;
+                a = a.port_manage.dev_info;
+                for (var e = 0; e < a.length; e++)
+                    if (1 == a[e].cap) {
+                        p = a[e].power_pos;
+                        P = a[e][uciPortConfig.dynOptName.powerIdx];
+                        g = a[e].phy_num;
+                        b = Array(g);
+                        for (var h = 0; h < g; h++)
+                            b[h] = {};
+                        for (h = 0; h < a[e].phy_info.length; h++) {
+                            var f = h
+                              , n = "left" == p ? f : g - f - 1;
+                            switch (a[e].phy_info[h].role.slice(0, 3).toUpperCase()) {
+                            case "LAN":
+                                b[f].name = "LAN";
+                                b[f].state = "normal";
+                                b[f].rate = r(n);
+                                b[f].sfpType = getSfpPortType(a[e].phy_info[h].type);
+                                break;
+                            case "WAN":
+                                c = !0;
+                                b[f].name = "WAN";
+                                b[f].state = "active";
+                                b[f].rate = r(n);
+                                b[f].sfpType = getSfpPortType(a[e].phy_info[h].type);
+                                break;
+                            case "GAM":
+                                b[f].name = label.gamePort;
+                                b[f].state = "disable";
+                                b[f].rate = r(n);
+                                b[f].sfpType = getSfpPortType(a[e].phy_info[h].type);
+                                break;
+                            case "UPL":
+                                b[f].name = label.iptvUp;
+                                b[f].state = "disable";
+                                b[f].rate = r(n);
+                                b[f].sfpType = getSfpPortType(a[e].phy_info[h].type);
+                                break;
+                            case "DOW":
+                                b[f].name = label.iptvDown;
+                                b[f].state = "disable";
+                                b[f].rate = r(n);
+                                b[f].sfpType = getSfpPortType(a[e].phy_info[h].type);
+                                break;
+                            case "LAG":
+                                b[f].name = label.lagPort,
+                                b[f].state = "disable",
+                                b[f].rate = r(n),
+                                b[f].sfpType = getSfpPortType(a[e].phy_info[h].type)
+                            }
+                        }
+                    }
+                if (-1 != k && !c && !d)
+                    if (c = b,
+                    a = k,
+                    "disable" == c[a].state) {
+                        a = -1;
+                        for (e = 0; e < c.length; e++)
+                            if ("normal" == c[e].state) {
+                                a = e;
+                                break
+                            }
+                        -1 == a ? showAlert("固定WAN口设置失效且当前无可定义端口，请在端口自定义中关闭相关端口定义") : (c[a].name = "WAN",
+                        c[a].state = "active")
+                    } else
+                        c[a].name = "WAN",
+                        c[a].state = "active";
+                if (d)
+                    for (e = 0; e < b.length; e++)
+                        if ("WAN" == b[e].name || "LAN" == b[e].name)
+                            b[e].name = "WAN/LAN",
+                            b[e].state = "active";
+                l = new PortConfig;
+                c = {
+                    element: $(".wanDisplayContainer")[0],
+                    type: "display",
+                    port: b,
+                    powerPos: p,
+                    powerIdx: P,
+                    displayClickable: !1 == d,
+                    callback: X
+                };
+                l.init(c)
+            })
+        }
+        function Q(d) {
+            var a = ethLayoutList.split("-"), c;
+            c = a.slice(0, a.length);
+            g = a.length;
+            p = "undefined" != typeof devicePowerPos ? devicePowerPos : "left";
+            b = Array(g);
+            for (a = 0; a < g; a++)
+                b[a] = {};
+            for (a = 0; a < c.length; a++)
+                if ("left" == p)
+                    switch (c[a]) {
+                    case "1":
+                        b[a].name = "10M";
+                        b[a].state = "disable";
+                        b[a].rate = "10M";
+                        break;
+                    case "2":
+                        b[a].name = "100M";
+                        b[a].state = "disable";
+                        b[a].rate = "100M";
+                        break;
+                    case "3":
+                        b[a].name = "GE";
+                        b[a].state = "disable";
+                        b[a].rate = "GE";
+                        break;
+                    case "4":
+                        b[a].name = "2.5GE";
+                        b[a].state = "disable";
+                        b[a].rate = "2.5GE";
+                        break;
+                    case "5":
+                        b[a].name = "10GE",
+                        b[a].state = "disable",
+                        b[a].rate = "10GE"
+                    }
+                else
+                    switch (c[a]) {
+                    case "1":
+                        b[g - a - 1].name = "10M";
+                        b[g - a - 1].state = "disable";
+                        b[g - a - 1].rate = "10M";
+                        break;
+                    case "2":
+                        b[g - a - 1].name = "100M";
+                        b[g - a - 1].state = "disable";
+                        b[g - a - 1].rate = "100M";
+                        break;
+                    case "3":
+                        b[g - a - 1].name = "GE";
+                        b[g - a - 1].state = "disable";
+                        b[g - a - 1].rate = "GE";
+                        break;
+                    case "4":
+                        b[g - a - 1].name = "2.5GE";
+                        b[g - a - 1].state = "disable";
+                        b[g - a - 1].name = "2.5GE";
+                        break;
+                    case "5":
+                        b[g - a - 1].name = "10GE",
+                        b[g - a - 1].state = "disable",
+                        b[g - a - 1].name = "10GE"
+                    }
+            for (a = 0; a < wanPortIndexList.length; a++)
+                b[wanPortIndexList[a]].state = "normal";
+            -1 != k && (b[k].state = "active");
+            if (d)
+                for (a = 0; a < b.length; a++)
+                    "disable" != b[a].state && (b[a].state = "active");
+            l = new PortConfig;
+            d = {
+                element: $(".wanDisplayContainer")[0],
+                type: "display",
+                port: b,
+                powerPos: p,
+                powerIdx: "undefined" !== typeof POWER_IDX ? POWER_IDX : 0,
+                displayClickable: !1 == d,
+                callback: W
+            };
+            l.init(d)
+        }
+        var v = uciProto.fileName, s = uciProto.secName.wan, t = uciProto.secName.pppoe, Y = uciProto.optName.dnsMode, J = uciProto.optName.mtu, x = uciProto.optName.speed, R = uciProto.optName.type, Z = uciProto.optName.proto, G = uciProto.optName.pppoeUsr, H = uciProto.optName.pppoePwd, B = uciProto.optName.dialMode, A = uciProto.optName.connMode, K = uciProto.optName.acName, L = uciProto.optName.svcName, aa = uciProto.optName.ipMode, ba = uciProto.optName.macaddr, ca = uciProto.optValue.dnsMode.dynamic, M = uciProto.optValue.connMode.auto, da = uciProto.optValue.ispMode.dhcp, U = [{
+            str: label.demand,
+            value: uciProto.optValue.connMode.demand
+        }, {
+            str: label.auto,
+            value: M
+        }, {
+            str: label.manual,
+            value: uciProto.optValue.connMode.manual
+        }], N = [{
+            str: label.autoDial,
+            value: "auto"
+        }, {
+            str: label.normDial,
+            value: "normal"
+        }], m, k, l, b, p, P, g;
+        dualWanOpen && 1 != currentSelectedWan && (s += "_" + currentSelectedWan,
+        t += "_" + currentSelectedWan);
+        for (var y = 1; 8 > y; y++)
+            N.push({
+                str: label.specDial + y,
+                value: "special" + y
+            });
+        id("pingAddr").onkeyup = function() {
+            var b = this.value;
+            checkIp(b) != ENONE && "0.0.0.0" != b ? ($("#pingAddrNoteLine").text(errStr.wzdStcIpErr),
+            id("pingAddrNote").style.visibility = "visible") : id("pingAddrNote").style.visibility = "hidden"
+        }
+        ;
+        id("dnsAddr").onkeyup = function() {
+            var b = this.value;
+            checkIp(b) != ENONE && "0.0.0.0" != b ? ($("#dnsAddrNoteLine").text(errStr.wzdStcIpErr),
+            id("dnsAddrNote").style.visibility = "visible") : id("dnsAddrNote").style.visibility = "hidden"
+        }
+        ;
+        gSupportWanPortSwap && !gWanPortDetectSupport && $("#wanPortSelDiv").removeClass("disNone");
+        selectInit("wanSel", wanOptions, LINK_TYPE_PPPOE, wanSelectChange);
+        m = $.setTimeout(u, 2E3);
+        disableBtn("disconnect", !0);
+        id("disconnect").onclick = function() {
+            var b = null
+              , b = dualWanOpen && 1 != currentSelectedWan ? {
+                network: {
+                    change_wan_status: {
+                        proto: "pppoe_" + currentSelectedWan,
+                        operate: "disconnect"
+                    }
+                }
+            } : {
+                network: {
+                    change_wan_status: {
+                        proto: "pppoe",
+                        operate: "disconnect"
+                    }
+                }
+            };
+            clearTimeout(m);
+            disableBtn("save", !0);
+            disableBtn("saveHighSet", !0);
+            setLoadingId("disconnect");
+            hsLoading(!0);
+            $.action(b, function(a) {
+                hsLoading(!1, function() {
+                    disableBtn("save", !1);
+                    disableBtn("saveHighSet", !1)
+                });
+                m = $.setTimeout(u, 2E3)
+            })
+        }
+        ;
+        id("save").onclick = function() {
+            function b() {
+                if (!gSupportWanPortSwap || gWanPortDetectSupport)
+                    w();
+                else {
+                    var a = id("wanPortSel").value;
+                    if (a == k)
+                        w();
+                    else {
+                        var c = {}
+                          , e = {};
+                        c[uciProto.fileName] = {};
+                        c[uciProto.fileName][uciProto.secName.wan] = e;
+                        e[uciProto.optName.port] = a;
+                        var d = id("wanRateSel").value;
+                        checkIfWanRateShouldChange(a, d) && (d = e[uciProto.optName.rate] = "auto");
+                        showLoading(label.switchWanPortAndWait, null, void 0, !1);
+                        $.modify(c, function(b) {
+                            if (b[ERR_CODE] == ENONE) {
+                                k = a;
+                                b = b.wait_time || 0;
+                                b = parseInt(b);
+                                var c = initDynamicPortRate(a, devicePowerPos);
+                                id("wanRateSel").resetOptions(c, d);
+                                0 == b ? (closeLoading(),
+                                w()) : $.setTimeout(function() {
+                                    closeLoading();
+                                    w()
+                                }, 1E3 * b)
+                            } else
+                                closeLoading(),
+                                id("wanPortSel").changeSel(k),
+                                wanPortSelectChange(k),
+                                showAlert(errStr.systemErr)
+                        })
+                    }
+                }
+            }
+            gSysModeSupport ? curSysMode != uciSystem.optValue.sysMode.routerMode ? changeSysModeAlert("switch", uciSystem.optValue.sysMode.routerMode, function() {
+                b()
+            }) : b() : wanCheckWDS(b)
+        }
+        ;
+        id("saveHighSet").onclick = function() {
+            function b() {
+                var a = {}
+                  , c = {}
+                  , e = {}
+                  , d = {};
+                a[v] = c;
+                c[s] = d;
+                c[t] = e;
+                var c = id("wanDialSel").value
+                  , f = id("wanLinkSel").value
+                  , g = id("mtu").value
+                  , k = id("acName").value
+                  , l = id("svcName").value
+                  , r = id("wanRateSel").value
+                  , q = id("wanMac")
+                  , p = q.value;
+                e[B] = c;
+                e[A] = f;
+                if (!z(checkMtu(g, 1492, 576), "mtu") && !wanMacErrHandle(checkMac(p), q)) {
+                    g = hideLeadingZeros(g);
+                    id("mtu").value = g;
+                    e[J] = g;
+                    e[K] = k;
+                    e[L] = l;
+                    e[aa] = da;
+                    e[Y] = ca;
+                    d[ba] = p;
+                    $("#wanRateSelUl").is(":hidden") || (d[x] = r);
+                    e[Z] = uciProto.optValue.proto.none;
+                    if (gSupportOnlineCheck && (e = "wan" + ("2" == currentSelectedWan ? "_2" : ""),
+                    d = id("onlineCheckSel").value,
+                    a[uciOnlineCheck.fileName] = {},
+                    a[uciOnlineCheck.fileName][e] = {
+                        mode: d
+                    },
+                    "manual" == d)) {
+                        d = hideLeadingZeros(id("pingAddr").value);
+                        c = hideLeadingZeros(id("dnsAddr").value);
+                        if ("0.0.0.0" == d && "0.0.0.0" == c) {
+                            showAlert(errStr.pingAndDnsEmpty);
+                            return
+                        }
+                        if (ENONE != checkIp(d) && "0.0.0.0" != d || ENONE != checkIp(c) && "0.0.0.0" != c)
+                            return;
+                        a[uciOnlineCheck.fileName][e][uciOnlineCheck.optName.gateway] = d;
+                        a[uciOnlineCheck.fileName][e][uciOnlineCheck.optName.dns] = c
+                    }
+                    clearTimeout(m);
+                    disableBtn("save", !0);
+                    disableBtn("disconnect", !0);
+                    setLoadingId("saveHighSet");
+                    hsLoading(!0);
+                    $.modify(a, function(a) {
+                        hsLoading(!1, function() {
+                            disableBtn("save", !1);
+                            disableBtn("disconnect", !1)
+                        });
+                        m = $.setTimeout(u, 0);
+                        if (a[ERR_CODE] == ENONE)
+                            C();
+                        else
+                            return z(a[ERR_CODE])
+                    })
+                }
+            }
+            gSysModeSupport && !dualWanOpen ? b() : wanCheckWDS(b)
+        }
+        ;
+        gWanPortDetectSupport && !dualWanOpen && 1 < gSwitchPortNum && ($("#wanSetDiv").removeClass("disNone"),
+        id("wanSetFixedTip").innerHTML = label.wanSetFixedSelTip,
+        $('input[name="wanSetRadio"]').on("click", function() {
+            if ("wanSetAuto" == this.id)
+                $("#selectWanPort").hide(),
+                gSupportPortManage && gSupportWanPortSwap ? ($(".sampleImgCon").hide(),
+                O(!0),
+                $(".wanDisplayContainer").show()) : gSupportWanPortSwap ? ($(".sampleImgCon").hide(),
+                Q(!0),
+                $(".wanDisplayContainer").show()) : (id("wanSetFixedTip").innerHTML = label.wanSetFixedTips,
+                $(".sampleImgCon").show(),
+                id("sampleImg").src = "../web-static/images/wanSetAuto.png",
+                id("sampleImg").useMap = "",
+                $(".wanDisplayContainer").hide(),
+                $("#selectWanPort").hide()),
+                $("#wanRateSel span")[0].innerHTML = label.dupAuto,
+                id("wanRateSel").disable(!0),
+                $("#wanRateSelUl").show();
+            else {
+                id("wanRateSel").disable(!1);
+                if (gSupportPortManage && gSupportWanPortSwap)
+                    $(".sampleImgCon").hide(),
+                    O(!1),
+                    $(".wanDisplayContainer").show(),
+                    $("#selectWanPort").show();
+                else if (gSupportWanPortSwap)
+                    $(".sampleImgCon").hide(),
+                    Q(!1),
+                    $(".wanDisplayContainer").show(),
+                    $("#selectWanPort").show();
+                else {
+                    $(".sampleImgCon").show();
+                    id("sampleImg").src = "../web-static/images/wanSetFixed.png";
+                    id("sampleImg").useMap = "";
+                    var b = id("wanRateSel").value;
+                    id("wanRateSel").resetOptions(rateOptions, b);
+                    $(".wanDisplayContainer").hide();
+                    $("#selectWanPort").hide();
+                    id("wanSetFixedTip").innerHTML = label.wanSetFixedTips;
+                    return
+                }
+                var b = id("wanRateSel").value
+                  , a = initDynamicPortRate(k, devicePowerPos);
+                id("wanRateSel").resetOptions(a, b)
+            }
+        }),
+        id("wanSetBtn").onclick = V);
+        C()
+    }
+    init();
+</script>
+<style type="text/css">
+    #pppoeSolution {
+        color: #005fb8;
+        font-size: 12px;
+        margin-left: 10px;
+        text-indent: 0;
+        vertical-align: middle
+    }
+
+    li.wanLinkLi {
+        margin-left: 86px
+    }
+
+    #save {
+        margin-left: 25px!important
+    }
+
+    #onlineTimeUl {
+        display: none
+    }
+
+    li.macCloneLi {
+        color: #fff;
+        font-size: 12px;
+        line-height: 20px!important
+    }
+
+    #wanStatus i {
+        display: inline-block;
+        height: 13px;
+        width: 13px;
+        vertical-align: middle;
+        line-height: 0
+    }
+
+    div.block p.tips {
+        font-size: 12px;
+        color: #fff;
+        letter-spacing: 0;
+        line-height: 12px;
+        text-align: left
+    }
+
+    div.block div.wanSetCon {
+        margin-top: 40px;
+        color: #fff;
+        text-align: left
+    }
+
+    div.wanSetTitle,div.radioBtnCon {
+        display: inline-block
+    }
+
+    div.wanSetTitle {
+        font-size: 14px;
+        color: #fff;
+        letter-spacing: -0.43px;
+        text-align: right;
+        margin-left: 100px;
+        margin-right: 14px;
+        vertical-align: top
+    }
+
+    div.radioBtnCon label.radioLbl {
+        font-size: 14px;
+        color: #fff;
+        letter-spacing: -0.43px;
+        vertical-align: middle;
+        margin-left: 4px
+    }
+
+    div.radioBtnCon p.des {
+        font-size: 12px;
+        color: #fff;
+        letter-spacing: 0;
+        line-height: 12px;
+        margin: 8px 17px 25px
+    }
+
+    div.sampleImgCon {
+        margin-top: 15px;
+        text-align: center
+    }
+
+    ul.wanSel {
+        margin-bottom: 0!important
+    }
+
+    ul.wanSelTips {
+        margin-top: 10px;
+        margin-bottom: 0;
+        height: 14px;
+        line-height: 14px
+    }
+
+    ul.wanSelTips label {
+        height: 14px;
+        line-height: 14px
+    }
+
+    ul.wanSelTips span {
+        font-size: 14px;
+        color: #FFF
+    }
+
+    .wanPortWrapper {
+        text-align: left;
+        display: inline-block
+    }
+
+    .wanPortTopWrapper {
+        text-align: center
+    }
+
+    #selectWanPort {
+        padding-bottom: 8px;
+        font-size: 14px;
+        color: #fff;
+        letter-spacing: -0.43px;
+        vertical-align: middle
+    }
+
+    #wanSetDiv .blockFuncA {
+        padding-right: 150px
+    }
+
+    #wanRateSelUl {
+        height: auto
+    }
+
+    #wanRateSelUl .negoRate {
+        display: block;
+        font-size: 12px;
+        color: #fff;
+        padding-left: 260px
+    }
+</style>
+
+
+
