@@ -1,71 +1,68 @@
 @echo off
 chcp 65001 >nul
 echo ========================================
-echo 宽带拨号工具 - 零依赖版本打包脚本（目录模式）
+echo   Broadband Dialer - Build Script
+echo   (onedir mode, low resource usage)
 echo ========================================
-echo.
-echo 🎯 目标：创建低资源占用的独立应用
-echo 📦 模式：--onedir（目录模式，推荐）
-echo 💾 资源占用：启动快，无需临时空间
 echo.
 
 cd /d "%~dp0"
 
-:: 检查 Python 是否安装
-echo [1/5] 检查 Python 环境...
+:: Check Python installation
+echo [1/5] Checking Python environment...
 python --version >nul 2>&1
 if errorlevel 1 (
-    echo ❌ 错误: 未找到 Python
-    echo 请先安装 Python 3.8 或更高版本
+    echo [Error] Python not found
+    echo Please install Python 3.8 or higher
     pause
     exit /b 1
 )
 python --version
-echo ✅ Python 环境检查通过
+echo [OK] Python environment check passed
 echo.
 
-:: 检查浏览器目录是否存在
-echo [2/5] 检查浏览器文件...
+:: Check browser directory
+echo [2/5] Checking browser files...
 if exist "chrome-win64\chrome.exe" (
-    echo ✅ 找到项目自带浏览器: chrome-win64\chrome.exe
+    echo [OK] Found project browser: chrome-win64\chrome.exe
 ) else if exist "chromium-mini\chrome.exe" (
-    echo ✅ 找到精简版浏览器: chromium-mini\chrome.exe
+    echo [OK] Found mini browser: chromium-mini\chrome.exe
 ) else if exist "ms-playwright\chromium-1208\chrome-win64\chrome.exe" (
-    echo ✅ 找到完整版浏览器: ms-playwright\chromium-1208\chrome-win64\chrome.exe
+    echo [OK] Found full browser: ms-playwright\chromium-1208\chrome-win64\chrome.exe
 ) else (
-    echo ❌ 错误: 未找到浏览器文件！
+    echo [Error] Browser files not found!
     echo.
-    echo 请将 Chrome 浏览器文件放在以下位置之一：
-    echo   1. chrome-win64\chrome.exe（项目自带，推荐）
-    echo   2. chromium-mini\chrome.exe（精简版）
-    echo   3. ms-playwright\chromium-1208\chrome-win64\chrome.exe（完整版）
+    echo Please place Chrome browser files in one of these locations:
+    echo   1. chrome-win64\chrome.exe (project built-in, recommended)
+    echo   2. chromium-mini\chrome.exe (mini version)
+    echo   3. ms-playwright\chromium-1208\chrome-win64\chrome.exe (full version)
     echo.
     pause
     exit /b 1
 )
 echo.
 
-:: 清理旧的构建文件（避免缓存导致依赖遗漏）
-echo [3/5] 清理旧的构建文件...
+:: Clean old build files
+echo [3/5] Cleaning old build files...
 if exist "dist" rd /s /q "dist"
 if exist "build" rd /s /q "build"
 if exist "TP-Link_Dialer.spec" del /f /q "TP-Link_Dialer.spec"
-echo ✅ 清理完成
+echo [OK] Clean completed
 echo.
 
-:: 核心打包命令（零依赖配置 + onedir 模式）
-echo [4/5] 使用 PyInstaller 打包（目录模式）...
+:: Build command (zero-dependency config + onedir mode)
+echo [4/5] Building with PyInstaller (onedir mode)...
 echo.
 
-:: 根据浏览器类型选择打包参数
+:: Select browser data based on available browser
 if exist "chrome-win64\chrome.exe" (
-    echo 📦 使用项目自带浏览器打包...
+    echo [Info] Using project built-in browser...
     set "BROWSER_DATA=chrome-win64;chrome-win64"
 ) else if exist "chromium-mini\chrome.exe" (
-    echo 📦 使用精简版浏览器打包...
+    echo [Info] Using mini browser...
     set "BROWSER_DATA=chromium-mini;chromium-mini"
 ) else (
-    echo 📦 使用完整版浏览器打包...
+    echo [Info] Using full browser...
     set "BROWSER_DATA=ms-playwright;ms-playwright"
 )
 
@@ -107,49 +104,49 @@ python -m PyInstaller ^
 
 if errorlevel 1 (
     echo.
-    echo ❌ 打包失败！
+    echo [Error] Build failed!
     echo.
-    echo 可能的原因：
-    echo 1. Python 依赖包未安装
-    echo 2. 浏览器文件路径错误
-    echo 3. PyInstaller 版本不兼容
+    echo Possible reasons:
+    echo 1. Python dependencies not installed
+    echo 2. Browser file path incorrect
+    echo 3. PyInstaller version incompatible
     echo.
-    echo 请检查错误信息并重试
+    echo Please check error messages and retry
     pause
     exit /b 1
 )
 echo.
 
-:: 显示打包结果
-echo [5/5] 打包完成！
+:: Display build results
+echo [5/5] Build completed!
 echo ========================================
-echo ✅ 零依赖版本打包成功！（目录模式）
+echo [OK] Zero-dependency version built! (onedir mode)
 echo ========================================
 echo.
-echo 📦 输出目录: dist\TP-Link_Dialer\
-echo 📦 主程序: dist\TP-Link_Dialer\TP-Link_Dialer.exe
+echo Output directory: dist\TP-Link_Dialer\
+echo Main program: dist\TP-Link_Dialer\TP-Link_Dialer.exe
 echo.
-echo 📊 资源占用对比：
-echo   --onedir 模式（当前）：
-echo     - 主程序大小：约 50-100 MB
-echo     - 运行时临时空间：不需要
-echo     - 启动速度：快
+echo Resource usage comparison:
+echo   --onedir mode (current):
+echo     - Main program: 50-100 MB
+echo     - Runtime temp space: Not needed
+echo     - Startup speed: Fast (1-2 seconds)
 echo.
-echo   --onefile 模式（单文件）：
-echo     - 主程序大小：约 400-500 MB
-echo     - 运行时临时空间：需要 400-500 MB
-echo     - 启动速度：慢（需解压）
+echo   --onefile mode (single file):
+echo     - Main program: 400-500 MB
+echo     - Runtime temp space: Need 400-500 MB
+echo     - Startup speed: Slow (5-10 seconds)
 echo.
-echo ✨ 优势：
-echo   - ✅ 启动速度快（无需解压）
-echo   - ✅ 资源占用低（无需临时空间）
-echo   - ✅ 内存占用小（按需加载）
-echo   - ✅ 更新方便（只需更新部分文件）
+echo Advantages:
+echo   - Fast startup (no extraction needed)
+echo   - Low resource usage (no temp space needed)
+echo   - Small memory footprint (load on demand)
+echo   - Easy updates (only update changed files)
 echo.
-echo 📦 分发方式：
-echo   1. 直接压缩 dist\TP-Link_Dialer\ 目录为 ZIP
-echo   2. 使用 NSIS 制作安装程序（推荐）
-echo   3. 使用 build_installer.bat 自动制作安装程序
+echo Distribution methods:
+echo   1. Compress dist\TP-Link_Dialer\ directory to ZIP
+echo   2. Use NSIS to create installer (recommended)
+echo   3. Use build_installer.bat to auto-create installer
 echo.
-echo 按任意键退出...
+echo Press any key to exit...
 pause >nul

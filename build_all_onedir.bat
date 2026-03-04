@@ -8,7 +8,7 @@ echo.
 echo This script will:
 echo   1. Build EXE (onedir mode, low resource usage)
 echo   2. Build installer (NSIS)
-echo   3. Output: 发布包\Broadband_Dialer_Setup.exe
+echo   3. Output: Release\Broadband_Dialer_Setup.exe
 echo.
 echo Press any key to continue or Ctrl+C to cancel...
 pause >nul
@@ -58,13 +58,13 @@ echo ========================================
 echo.
 echo Output files:
 echo   - EXE: dist\TP-Link_Dialer\TP-Link_Dialer.exe
-echo   - Installer: 发布包\Broadband_Dialer_Setup.exe
+echo   - Installer: Release\Broadband_Dialer_Setup.exe
 echo.
 echo Features:
 echo   - Low resource usage (onedir mode)
 echo   - Fast startup (1-2 seconds)
-echo   - Desktop shortcut: 宽带连接
-echo   - Start menu: 宽带连接
+echo   - Desktop shortcut: Broadband Connection
+echo   - Start menu: Broadband Connection
 echo   - Zero dependencies (no Python/Chrome needed)
 echo.
 echo Press any key to exit...
