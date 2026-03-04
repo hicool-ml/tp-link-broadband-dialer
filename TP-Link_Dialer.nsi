@@ -31,6 +31,9 @@ ShowUninstDetails show
 !define MUI_ABORTWARNING
 !define MUI_COMPONENTSPAGE_NODESC
 
+; 显式加载中文语言文件（避免乱码）
+!insertmacro MUI_LANGUAGE "SimpChinese"
+
 ; 欢迎页面
 !insertmacro MUI_PAGE_WELCOME
 ; 许可协议页面
@@ -44,7 +47,7 @@ ShowUninstDetails show
 ; 完成页面
 !insertmacro MUI_PAGE_FINISH
 
-; 语言设置
+; 语言设置（再次确保中文语言）
 !insertmacro MUI_LANGUAGE "SimpChinese"
 
 ; 许可协议文本
