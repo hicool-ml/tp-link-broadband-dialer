@@ -1,6 +1,6 @@
-; TP-Link Broadband Dialer Tool - Installer Script
+﻿; TP-Link Broadband Dialer Tool - Installer Script
 ; Compiled with NSIS (Nullsoft Scriptable Install System)
-; Encoding: ANSI (save as UTF-8 with BOM for Unicode)
+; Encoding: UTF-8 with BOM (save file as UTF-8 with BOM)
 
 ; Enable Unicode support (required for Chinese characters)
 Unicode true
@@ -15,7 +15,7 @@ Unicode true
 
 ; Installer Configuration
 Name "${APP_NAME}"
-OutFile "Release\Broadband_Dialer_Setup.exe"
+OutFile "Release\宽带拨号工具_Setup.exe"
 InstallDir "$PROGRAMFILES64\${APP_DIR}"
 InstallDirRegKey HKLM "Software\${APP_DIR}" "InstallPath"
 RequestExecutionLevel admin
@@ -47,12 +47,12 @@ LicenseData "license.txt"
 !insertmacro MUI_LANGUAGE "SimpChinese"
 
 ; Installation Section
-Section "Main Program" SecMain
+Section "主程序" SecMain
   SectionIn RO
   
   SetOutPath $INSTDIR
   
-  DetailPrint "Copying program files..."
+  DetailPrint "正在复制程序文件..."
   
   ; Copy entire dist directory (onedir mode)
   File /r "dist\TP-Link_Dialer\*.*"
@@ -70,17 +70,17 @@ Section "Main Program" SecMain
   SetOutPath $INSTDIR
   
   ; Create desktop shortcut
-  DetailPrint "Creating desktop shortcut..."
-  CreateShortCut "$DESKTOP\Broadband Connection.lnk" "$INSTDIR\TP-Link_Dialer\${APP_EXE}" "" "$INSTDIR\${APP_ICON}" 0
+  DetailPrint "正在创建桌面快捷方式..."
+  CreateShortCut "$DESKTOP\宽带链接.lnk" "$INSTDIR\TP-Link_Dialer\${APP_EXE}" "" "$INSTDIR\${APP_ICON}" 0
   
   ; Create start menu shortcuts
-  DetailPrint "Creating start menu shortcuts..."
-  CreateDirectory "$SMPROGRAMS\Broadband Dialer"
-  CreateShortCut "$SMPROGRAMS\Broadband Dialer\Broadband Connection.lnk" "$INSTDIR\TP-Link_Dialer\${APP_EXE}" "" "$INSTDIR\${APP_ICON}" 0
-  CreateShortCut "$SMPROGRAMS\Broadband Dialer\Uninstall.lnk" "$INSTDIR\uninstall.exe"
+  DetailPrint "正在创建开始菜单快捷方式..."
+  CreateDirectory "$SMPROGRAMS\宽带拨号工具"
+  CreateShortCut "$SMPROGRAMS\宽带拨号工具\宽带链接.lnk" "$INSTDIR\TP-Link_Dialer\${APP_EXE}" "" "$INSTDIR\${APP_ICON}" 0
+  CreateShortCut "$SMPROGRAMS\宽带拨号工具\卸载.lnk" "$INSTDIR\uninstall.exe"
   
   ; Write registry entries
-  DetailPrint "Writing registry entries..."
+  DetailPrint "正在写入注册表..."
   WriteRegStr HKLM "Software\${APP_DIR}" "InstallPath" "$INSTDIR"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "DisplayName" "${APP_NAME}"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "DisplayVersion" "${APP_VERSION}"
@@ -90,16 +90,16 @@ Section "Main Program" SecMain
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "NoRepair" 1
   
   ; Create uninstaller
-  DetailPrint "Creating uninstaller..."
+  DetailPrint "正在创建卸载程序..."
   WriteUninstaller "$INSTDIR\uninstall.exe"
   
-  DetailPrint "Installation completed!"
+  DetailPrint "安装完成！"
 SectionEnd
 
 ; Uninstallation Section
 Section "Uninstall"
   ; Delete files
-  DetailPrint "Deleting program files..."
+  DetailPrint "正在删除程序文件..."
   
   ; Delete entire dist directory
   RMDir /r "$INSTDIR\TP-Link_Dialer"
@@ -114,18 +114,19 @@ Section "Uninstall"
   Delete "$INSTDIR\uninstall.exe"
   
   ; Delete shortcuts
-  DetailPrint "Deleting shortcuts..."
-  Delete "$DESKTOP\Broadband Connection.lnk"
-  RMDir /r "$SMPROGRAMS\Broadband Dialer"
+  DetailPrint "正在删除快捷方式..."
+  Delete "$DESKTOP\宽带链接.lnk"
+  RMDir /r "$SMPROGRAMS\宽带拨号工具"
   
   ; Delete registry entries
-  DetailPrint "Cleaning registry..."
+  DetailPrint "正在清理注册表..."
   DeleteRegKey HKLM "Software\${APP_DIR}"
   DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}"
   
   ; Delete installation directory
-  DetailPrint "Deleting installation directory..."
+  DetailPrint "正在删除安装目录..."
   RMDir "$INSTDIR"
   
-  DetailPrint "Uninstallation completed!"
+  DetailPrint "卸载完成！"
 SectionEnd
+
