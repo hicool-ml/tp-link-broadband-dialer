@@ -12,7 +12,7 @@
 
 ; Installer Configuration
 Name "${APP_NAME}"
-OutFile "发布包\Broadband_Dialer_Setup.exe"
+OutFile "Release\Broadband_Dialer_Setup.exe"
 InstallDir "$PROGRAMFILES64\${APP_DIR}"
 InstallDirRegKey HKLM "Software\${APP_DIR}" "InstallPath"
 RequestExecutionLevel admin
@@ -68,13 +68,13 @@ Section "Main Program" SecMain
   
   ; Create desktop shortcut
   DetailPrint "Creating desktop shortcut..."
-  CreateShortCut "$DESKTOP\宽带连接.lnk" "$INSTDIR\TP-Link_Dialer\${APP_EXE}" "" "$INSTDIR\${APP_ICON}" 0
+  CreateShortCut "$DESKTOP\Broadband Connection.lnk" "$INSTDIR\TP-Link_Dialer\${APP_EXE}" "" "$INSTDIR\${APP_ICON}" 0
   
   ; Create start menu shortcuts
   DetailPrint "Creating start menu shortcuts..."
-  CreateDirectory "$SMPROGRAMS\宽带连接"
-  CreateShortCut "$SMPROGRAMS\宽带连接\宽带连接.lnk" "$INSTDIR\TP-Link_Dialer\${APP_EXE}" "" "$INSTDIR\${APP_ICON}" 0
-  CreateShortCut "$SMPROGRAMS\宽带连接\卸载.lnk" "$INSTDIR\uninstall.exe"
+  CreateDirectory "$SMPROGRAMS\Broadband Connection"
+  CreateShortCut "$SMPROGRAMS\Broadband Connection\Broadband Connection.lnk" "$INSTDIR\TP-Link_Dialer\${APP_EXE}" "" "$INSTDIR\${APP_ICON}" 0
+  CreateShortCut "$SMPROGRAMS\Broadband Connection\Uninstall.lnk" "$INSTDIR\uninstall.exe"
   
   ; Write registry entries
   DetailPrint "Writing registry entries..."
@@ -112,8 +112,8 @@ Section "Uninstall"
   
   ; Delete shortcuts
   DetailPrint "Deleting shortcuts..."
-  Delete "$DESKTOP\宽带连接.lnk"
-  RMDir /r "$SMPROGRAMS\宽带连接"
+  Delete "$DESKTOP\Broadband Connection.lnk"
+  RMDir /r "$SMPROGRAMS\Broadband Connection"
   
   ; Delete registry entries
   DetailPrint "Cleaning registry..."

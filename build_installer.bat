@@ -56,7 +56,7 @@ echo [OK] Found NSIS: %NSIS_PATH%
 echo.
 
 echo [3/4] Creating release directory...
-if not exist "发布包" mkdir "发布包"
+if not exist "Release" mkdir "Release"
 echo [OK] Release directory created
 echo.
 
@@ -76,12 +76,12 @@ echo.
 
 echo ========================================
 echo   Build Completed!
-echo   Installer: 发布包\Broadband_Dialer_Setup.exe
+echo   Installer: Release\Broadband_Dialer_Setup.exe
 echo ========================================
 echo.
 echo Features:
-echo   - Desktop shortcut: 宽带连接
-echo   - Start menu: 宽带连接
+echo   - Desktop shortcut: Broadband Connection
+echo   - Start menu: Broadband Connection
 echo   - Low resource usage (onedir mode)
 echo.
 echo Press any key to exit...
