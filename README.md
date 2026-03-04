@@ -130,24 +130,76 @@ self.router_ip = "你的路由器IP"
 
 ## 打包为exe
 
-### 1. 安装PyInstaller
+### 零依赖打包（推荐）
+
+本项目支持**零依赖打包**，创建完全不依赖用户环境的独立 EXE，确保在任何 Windows 系统（Win7/10/11、32/64位、高低权限）上都能开箱即用。
+
+#### 快速开始
+
+**方案1：使用精简版浏览器（推荐，体积最小）**
+
+```bash
+# 1. 准备精简版浏览器
+prepare_browser.bat
+
+# 2. 打包 EXE
+build_exe.bat
+```
+
+**预期结果**：
+- 输出文件：`dist\TP-Link_Dialer.exe`
+- 文件大小：100-150MB
+- 特性：完全独立运行，无需安装 Python、Chrome 等任何依赖
+
+**方案2：使用完整版浏览器（体积较大）**
+
+```bash
+# 1. 下载完整版浏览器
+python -m playwright install chromium --with-deps
+xcopy "%LOCALAPPDATA%\ms-playwright" "ms-playwright" /E /I /Y
+
+# 2. 打包 EXE
+build_exe.bat
+```
+
+**预期结果**：
+- 输出文件：`dist\TP-Link_Dialer.exe`
+- 文件大小：200-300MB
+
+#### 详细说明
+
+完整的零依赖打包说明，请查看：[零依赖打包说明.md](零依赖打包说明.md)
+
+**核心特性**：
+- ✅ 完全独立运行，无需安装 Python
+- ✅ 内置浏览器，无需安装 Chrome
+- ✅ 适配 Win7/10/11、32/64位
+- ✅ 支持低权限用户运行
+- ✅ 禁用 UPX 压缩，避免杀毒软件误报
+- ✅ 自定义临时目录，避免权限问题
+
+### 传统打包（需要用户环境）
+
+#### 1. 安装PyInstaller
 
 ```bash
 pip install pyinstaller
 ```
 
-### 2. 打包命令
+#### 2. 打包命令
 
 ```bash
 pyinstaller --onefile --windowed --name="宽带拨号" --icon=app.ico tp_link_broadband_dialer.py
 ```
 
-### 3. 打包参数说明
+#### 3. 打包参数说明
 
 - `--onefile`：打包为单个exe文件
 - `--windowed`：不显示控制台窗口
 - `--name`：指定exe文件名
 - `--icon`：指定图标文件
+
+**注意**：传统打包方式需要用户安装 Python 和 Playwright，不推荐使用。
 
 ## 技术架构
 

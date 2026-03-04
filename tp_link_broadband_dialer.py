@@ -12,35 +12,64 @@ import ctypes
 import atexit
 from pathlib import Path
 
-# 设置 Playwright 浏览器路径（用于 PyInstaller 打包后的环境）
-def resource_path(relative_path):
-    """获取 PyInstaller 打包后的资源绝对路径"""
-    try:
-        # PyInstaller 创建临时文件夹，将路径存储在 _MEIPASS 中
-        base_path = sys._MEIPASS
-    except Exception:
-        # 如果不是打包环境，使用当前文件所在目录
-        base_path = os.path.abspath(".")
-    
-    return os.path.join(base_path, relative_path)
-
-# 强制 Playwright 使用打包后的本地浏览器
-if getattr(sys, 'frozen', False):
-    # PyInstaller 打包后的环境
-    browsers_path = resource_path("ms-playwright")
-    if os.path.exists(browsers_path):
-        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = browsers_path
-        print(f"Set PLAYWRIGHT_BROWSERS_PATH to: {browsers_path}")
+# ========== 核心：强制程序只使用内置资源 ==========
+def get_resource_path(relative_path):
+    """获取PyInstaller打包后的内置资源路径（无论是否单文件）"""
+    if hasattr(sys, '_MEIPASS'):
+        # 单文件打包时，临时解压目录
+        base_path = Path(sys._MEIPASS)
     else:
-        print(f"Warning: Playwright browsers not found at: {browsers_path}")
-        print(f"Available directories in {resource_path('')}:")
-        try:
-            for item in os.listdir(resource_path('')):
-                item_path = os.path.join(resource_path(''), item)
-                if os.path.isdir(item_path):
-                    print(f"  - {item}")
-        except:
-            pass
+        # 开发环境，项目根目录
+        base_path = Path(__file__).parent
+    return str(base_path / relative_path)
+
+# 1. 禁用Playwright的自动更新/路径查找（关键：不读用户环境）
+os.environ["PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD"] = "1"
+os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "0"  # 禁用默认路径
+
+# 2. 验证内置浏览器是否存在（避免打包遗漏）
+def check_browser():
+    """验证内置浏览器是否存在"""
+    # 尝试多个可能的浏览器路径
+    possible_paths = [
+        "chromium-mini/chrome.exe",  # 精简版浏览器
+        "ms-playwright/chromium-1208/chrome-win64/chrome.exe",  # 完整版浏览器
+        "_internal/ms-playwright/chromium-1208/chrome-win64/chrome.exe",  # PyInstaller打包后的路径
+    ]
+    
+    for browser_path in possible_paths:
+        full_path = get_resource_path(browser_path)
+        if Path(full_path).exists():
+            print(f"✅ 找到内置浏览器: {full_path}")
+            # 给浏览器添加执行权限（兼容老旧Windows）
+            try:
+                os.chmod(full_path, 0o755)
+            except:
+                pass
+            return full_path
+    
+    # 如果找不到浏览器，抛出异常
+    raise RuntimeError(
+        f"❌ 内置浏览器缺失！\n"
+        f"程序无法运行，请重新打包！\n\n"
+        f"已尝试的路径：\n" +
+        "\n".join([f"  - {get_resource_path(p)}" for p in possible_paths])
+    )
+
+# 3. 设置浏览器可执行文件路径环境变量
+try:
+    browser_exe = check_browser()
+    os.environ["CHROME_EXECUTABLE_PATH"] = browser_exe
+    print(f"✅ 设置 CHROME_EXECUTABLE_PATH: {browser_exe}")
+except RuntimeError as e:
+    print(str(e))
+    # 在开发环境中，如果没有浏览器，只显示警告
+    if not getattr(sys, 'frozen', False):
+        print("⚠️ 开发环境警告：未找到内置浏览器，将使用系统浏览器")
+    else:
+        # 打包后的环境，必须要有浏览器
+        input("按回车退出...")
+        sys.exit(1)
 
 # 尝试导入PIL和pystray（可选依赖）
 try:
@@ -1014,34 +1043,39 @@ class RouterLoginGUI:
             with sync_playwright() as p:
                 self.log("🌐 正在启动 Chromium 浏览器（无头模式）...")
                 
-                # 尝试找到打包的 Chromium 可执行文件
+                # 获取内置浏览器路径
                 executable_path = None
-                if getattr(sys, 'frozen', False):
-                    # PyInstaller 打包后的环境
-                    possible_paths = [
-                        # 尝试多个可能的路径
-                        os.path.join(sys._MEIPASS, '_internal', 'ms-playwright', 'chromium-1208', 'chrome-win64', 'chrome.exe'),
-                        os.path.join(sys._MEIPASS, '_internal', 'ms-playwright', 'chromium-1208', 'chrome-win64', 'ch.exe'),
-                        os.path.join(sys._MEIPASS, 'ms-playwright', 'chromium-1208', 'chrome-win64', 'chrome.exe'),
-                    ]
-                    
-                    for path in possible_paths:
-                        if os.path.exists(path):
-                            executable_path = path
-                            self.log(f"找到 Chromium 可执行文件: {executable_path}")
-                            break
+                try:
+                    executable_path = check_browser()
+                    self.log(f"✅ 使用内置浏览器: {executable_path}")
+                except RuntimeError as e:
+                    self.log(f"⚠️ {e}")
+                    # 在开发环境中，使用系统默认浏览器
+                    if not getattr(sys, 'frozen', False):
+                        self.log("⚠️ 开发环境：使用系统默认浏览器")
+                    else:
+                        # 打包后的环境，必须有浏览器
+                        raise
                 
-                # 启动浏览器
+                # 启动浏览器（使用适配所有环境的参数）
                 launch_options = {
-                    'headless': True,
-                    'slow_mo': 300
+                    'headless': True,  # 无头模式，无界面，兼容所有环境
+                    'slow_mo': 300,
+                    'args': [
+                        "--no-sandbox",  # 禁用沙箱，Win7/低权限环境必备
+                        "--disable-gpu",  # 禁用GPU加速，避免显卡驱动问题
+                        "--disable-dev-shm-usage",  # 禁用共享内存，适配低配机器
+                        "--disable-extensions",  # 禁用扩展，减少依赖
+                        "--disable-plugins",  # 禁用插件
+                        "--lang=zh-CN",  # 强制中文，无需语言包
+                        "--disable-web-security",  # 禁用Web安全策略，避免跨域问题
+                        "--disable-features=VizDisplayCompositor",  # 禁用某些特性，提高兼容性
+                    ],
+                    'handle_sigint': False,  # 避免用户按Ctrl+C崩溃
                 }
                 
                 if executable_path:
                     launch_options['executable_path'] = executable_path
-                    self.log(f"使用打包的 Chromium: {executable_path}")
-                else:
-                    self.log("使用系统默认 Chromium")
                 
                 browser = p.chromium.launch(**launch_options)
                 context = browser.new_context()
@@ -1237,34 +1271,39 @@ class RouterLoginGUI:
                 # 使用 headless=True 静默执行，不显示浏览器窗口
                 self.log("🌐 正在启动 Chromium 浏览器（无头模式）...")
                 
-                # 尝试找到打包的 Chromium 可执行文件
+                # 获取内置浏览器路径
                 executable_path = None
-                if getattr(sys, 'frozen', False):
-                    # PyInstaller 打包后的环境
-                    possible_paths = [
-                        # 尝试多个可能的路径
-                        os.path.join(sys._MEIPASS, '_internal', 'ms-playwright', 'chromium-1208', 'chrome-win64', 'chrome.exe'),
-                        os.path.join(sys._MEIPASS, '_internal', 'ms-playwright', 'chromium-1208', 'chrome-win64', 'ch.exe'),
-                        os.path.join(sys._MEIPASS, 'ms-playwright', 'chromium-1208', 'chrome-win64', 'chrome.exe'),
-                    ]
-                    
-                    for path in possible_paths:
-                        if os.path.exists(path):
-                            executable_path = path
-                            self.log(f"找到 Chromium 可执行文件: {executable_path}")
-                            break
+                try:
+                    executable_path = check_browser()
+                    self.log(f"✅ 使用内置浏览器: {executable_path}")
+                except RuntimeError as e:
+                    self.log(f"⚠️ {e}")
+                    # 在开发环境中，使用系统默认浏览器
+                    if not getattr(sys, 'frozen', False):
+                        self.log("⚠️ 开发环境：使用系统默认浏览器")
+                    else:
+                        # 打包后的环境，必须有浏览器
+                        raise
                 
-                # 启动浏览器
+                # 启动浏览器（使用适配所有环境的参数）
                 launch_options = {
-                    'headless': True,
-                    'slow_mo': 300
+                    'headless': True,  # 无头模式，无界面，兼容所有环境
+                    'slow_mo': 300,
+                    'args': [
+                        "--no-sandbox",  # 禁用沙箱，Win7/低权限环境必备
+                        "--disable-gpu",  # 禁用GPU加速，避免显卡驱动问题
+                        "--disable-dev-shm-usage",  # 禁用共享内存，适配低配机器
+                        "--disable-extensions",  # 禁用扩展，减少依赖
+                        "--disable-plugins",  # 禁用插件
+                        "--lang=zh-CN",  # 强制中文，无需语言包
+                        "--disable-web-security",  # 禁用Web安全策略，避免跨域问题
+                        "--disable-features=VizDisplayCompositor",  # 禁用某些特性，提高兼容性
+                    ],
+                    'handle_sigint': False,  # 避免用户按Ctrl+C崩溃
                 }
                 
                 if executable_path:
                     launch_options['executable_path'] = executable_path
-                    self.log(f"使用打包的 Chromium: {executable_path}")
-                else:
-                    self.log("使用系统默认 Chromium")
                 
                 browser = p.chromium.launch(**launch_options)
                 context = browser.new_context()
