@@ -7,7 +7,7 @@ echo.
 
 cd /d "%~dp0"
 
-echo [1/5] 检查 Python 环境...
+echo [1/4] 检查 Python 环境...
 python --version >nul 2>&1
 if errorlevel 1 (
     echo [错误] 未找到 Python，请先安装 Python 3.11+
@@ -17,33 +17,17 @@ if errorlevel 1 (
 python --version
 echo.
 
-echo [2/5] 安装/更新依赖包...
-echo 正在安装 PyInstaller...
-pip install pyinstaller playwright pystray pillow -i https://pypi.tuna.tsinghua.edu.cn/simple
-if errorlevel 1 (
-    echo [错误] 依赖包安装失败
-    pause
-    exit /b 1
-)
-echo.
-echo 正在安装 Playwright 浏览器...
-python -m playwright install chromium --with-deps
-if errorlevel 1 (
-    echo [警告] Playwright 浏览器安装失败，程序可能无法正常运行
-)
-echo.
-
-echo [3/5] 清理旧的构建文件...
+echo [2/4] 清理旧的构建文件...
 if exist "build" rmdir /s /q "build"
 if exist "dist" rmdir /s /q "dist"
 if exist "TP-Link_Dialer.spec" del /q "TP-Link_Dialer.spec"
 echo.
 
-echo [4/5] 开始打包 exe 文件...
+echo [3/4] 开始打包 exe 文件...
 echo 正在使用 PyInstaller 打包...
 echo.
 
-pyinstaller --onefile ^
+python -m PyInstaller --onefile ^
     --windowed ^
     --name="TP-Link_Dialer" ^
     --icon=app.ico ^
@@ -73,7 +57,7 @@ if errorlevel 1 (
 )
 echo.
 
-echo [5/5] 打包完成！
+echo [4/4] 打包完成！
 echo ========================================
 echo   exe 文件位置: dist\TP-Link_Dialer.exe
 echo ========================================
