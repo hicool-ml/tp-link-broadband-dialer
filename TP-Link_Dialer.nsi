@@ -1,13 +1,8 @@
-; TP-Link宽带拨号工具 - 安装程序脚本
-; 使用 NSIS (Nullsoft Scriptable Install System) 编译
-; 编码：UTF-8 with BOM
-; 注意：请使用支持UTF-8的编辑器编辑此文件
+; TP-Link Broadband Dialer Tool - Installer Script
+; Compiled with NSIS (Nullsoft Scriptable Install System)
+; Encoding: ANSI
 
-; 设置Unicode支持
-!define UNICODE
-!define _UNICODE
-
-; 应用程序信息
+; Application Information
 !define APP_NAME "TP-Link宽带拨号"
 !define APP_VERSION "1.0.0"
 !define APP_PUBLISHER "Kilo Code"
@@ -15,77 +10,72 @@
 !define APP_DIR "TP-Link_Dialer"
 !define APP_ICON "app.ico"
 
-; 安装程序配置
+; Installer Configuration
 Name "${APP_NAME}"
 OutFile "发布包\TP-Link_Dialer_Setup.exe"
 InstallDir "$PROGRAMFILES64\${APP_DIR}"
 InstallDirRegKey HKLM "Software\${APP_DIR}" "InstallPath"
 RequestExecutionLevel admin
-Compress /SOLID LZMA
+SetCompressor /SOLID lzma
 ShowInstDetails show
 ShowUninstDetails show
 
-; 界面设置
+; Interface Settings
 !include "MUI2.nsh"
 
 !define MUI_ABORTWARNING
 !define MUI_COMPONENTSPAGE_NODESC
 
-; 显式加载中文语言文件（避免乱码）
-!insertmacro MUI_LANGUAGE "SimpChinese"
+; License Data
+LicenseData "license.txt"
 
-; 欢迎页面
+; Welcome Page
 !insertmacro MUI_PAGE_WELCOME
-; 许可协议页面
-!insertmacro MUI_PAGE_LICENSE
-; 组件页面（可选）
-;!insertmacro MUI_PAGE_COMPONENTS
-; 安装目录页面
+; License Page
+!insertmacro MUI_PAGE_LICENSE "license.txt"
+; Directory Page
 !insertmacro MUI_PAGE_DIRECTORY
-; 安装过程页面
+; Installation Page
 !insertmacro MUI_PAGE_INSTFILES
-; 完成页面
+; Finish Page
 !insertmacro MUI_PAGE_FINISH
 
-; 语言设置（再次确保中文语言）
+; Language Settings (Must be after all pages)
 !insertmacro MUI_LANGUAGE "SimpChinese"
 
-; 许可协议文本
-LicenseData "使用说明.txt"
-
-; 安装部分
-Section "主程序" SecMain
+; Installation Section
+Section "Main Program" SecMain
   SectionIn RO
   
   SetOutPath $INSTDIR
   
-  DetailPrint "正在复制程序文件..."
+  DetailPrint "Copying program files..."
   
-  ; 复制主程序文件
+  ; Copy main executable
   File "dist\${APP_EXE}"
   
-  ; 复制图标文件
+  ; Copy icon files
   File "app.ico"
   File "connecting.ico"
   File "error.ico"
   File "offline.ico"
   File "online.ico"
   
-  ; 复制说明文件
-  File "使用说明.txt"
+  ; Copy documentation
+  File "license.txt"
   
-  ; 创建桌面快捷方式
-  DetailPrint "正在创建桌面快捷方式..."
+  ; Create desktop shortcut
+  DetailPrint "Creating desktop shortcut..."
   CreateShortCut "$DESKTOP\${APP_NAME}.lnk" "$INSTDIR\${APP_EXE}" "" "$INSTDIR\${APP_ICON}" 0
   
-  ; 创建开始菜单快捷方式
-  DetailPrint "正在创建开始菜单快捷方式..."
+  ; Create start menu shortcuts
+  DetailPrint "Creating start menu shortcuts..."
   CreateDirectory "$SMPROGRAMS\${APP_NAME}"
   CreateShortCut "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk" "$INSTDIR\${APP_EXE}" "" "$INSTDIR\${APP_ICON}" 0
-  CreateShortCut "$SMPROGRAMS\${APP_NAME}\卸载.lnk" "$INSTDIR\uninstall.exe"
+  CreateShortCut "$SMPROGRAMS\${APP_NAME}\Uninstall.lnk" "$INSTDIR\uninstall.exe"
   
-  ; 写入注册表
-  DetailPrint "正在写入注册表..."
+  ; Write registry entries
+  DetailPrint "Writing registry entries..."
   WriteRegStr HKLM "Software\${APP_DIR}" "InstallPath" "$INSTDIR"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "DisplayName" "${APP_NAME}"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "DisplayVersion" "${APP_VERSION}"
@@ -94,39 +84,39 @@ Section "主程序" SecMain
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "NoModify" 1
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "NoRepair" 1
   
-  ; 创建卸载程序
-  DetailPrint "正在创建卸载程序..."
+  ; Create uninstaller
+  DetailPrint "Creating uninstaller..."
   WriteUninstaller "$INSTDIR\uninstall.exe"
   
-  DetailPrint "安装完成！"
+  DetailPrint "Installation completed!"
 SectionEnd
 
-; 卸载部分
+; Uninstallation Section
 Section "Uninstall"
-  ; 删除文件
-  DetailPrint "正在删除程序文件..."
+  ; Delete files
+  DetailPrint "Deleting program files..."
   Delete "$INSTDIR\${APP_EXE}"
   Delete "$INSTDIR\${APP_ICON}"
   Delete "$INSTDIR\connecting.ico"
   Delete "$INSTDIR\error.ico"
   Delete "$INSTDIR\offline.ico"
   Delete "$INSTDIR\online.ico"
-  Delete "$INSTDIR\使用说明.txt"
+  Delete "$INSTDIR\license.txt"
   Delete "$INSTDIR\uninstall.exe"
   
-  ; 删除快捷方式
-  DetailPrint "正在删除快捷方式..."
+  ; Delete shortcuts
+  DetailPrint "Deleting shortcuts..."
   Delete "$DESKTOP\${APP_NAME}.lnk"
   RMDir /r "$SMPROGRAMS\${APP_NAME}"
   
-  ; 删除注册表
-  DetailPrint "正在清理注册表..."
+  ; Delete registry entries
+  DetailPrint "Cleaning registry..."
   DeleteRegKey HKLM "Software\${APP_DIR}"
   DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}"
   
-  ; 删除安装目录
-  DetailPrint "正在删除安装目录..."
+  ; Delete installation directory
+  DetailPrint "Deleting installation directory..."
   RMDir "$INSTDIR"
   
-  DetailPrint "卸载完成！"
+  DetailPrint "Uninstallation completed!"
 SectionEnd

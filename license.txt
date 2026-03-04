@@ -1,0 +1,57 @@
+TP-Link Broadband Dialer Tool - License Agreement
+
+========================================
+IMPORTANT - READ CAREFULLY
+========================================
+
+This software is provided "as is" without warranty of any kind, express or implied, including but not limited to the warranties of merchantability, fitness for a particular purpose and noninfringement.
+
+In no event shall the authors or copyright holders be liable for any claim, damages or other liability, whether in an action of contract, tort or otherwise, arising from, out of or in connection with the software or the use or other dealings in the software.
+
+========================================
+USAGE RIGHTS
+========================================
+
+You are granted the right to:
+- Use this software for personal and commercial purposes
+- Modify the software for your own needs
+- Distribute the software in its original form
+
+You are NOT permitted to:
+- Remove or modify copyright notices
+- Claim ownership of the software
+- Distribute modified versions without proper attribution
+
+========================================
+DISCLAIMER
+========================================
+
+This software automates broadband dialing for TP-Link routers. Use at your own risk. The authors are not responsible for:
+- Any damage to your router or network equipment
+- Loss of internet connectivity
+- Unauthorized access to your network
+- Any other consequential damages
+
+========================================
+PRIVACY
+========================================
+
+This software:
+- Does NOT collect or transmit any personal data
+- Does NOT connect to any external servers
+- Does NOT contain any telemetry or tracking
+- Stores credentials locally on your computer only
+
+========================================
+THIRD-PARTY COMPONENTS
+========================================
+
+This software includes the following third-party components:
+- Playwright (Apache License 2.0)
+- Chromium (BSD License)
+- Python (Python Software Foundation License)
+
+Full license information is available in the documentation.
+
+========================================
+By clicking "I Agree", you acknowledge that you have read, understood, and agree to be bound by the terms of this license agreement.

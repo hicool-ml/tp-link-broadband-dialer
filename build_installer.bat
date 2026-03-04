@@ -23,12 +23,12 @@ if not exist "TP-Link_Dialer.nsi" (
 )
 echo ✓ 找到 NSIS 脚本
 
-if not exist "使用说明.txt" (
-    echo [错误] 未找到 使用说明.txt
+if not exist "license.txt" (
+    echo [错误] 未找到 license.txt
     pause
     exit /b 1
 )
-echo ✓ 找到使用说明文件
+echo ✓ 找到许可协议文件
 
 if not exist "app.ico" (
     echo [错误] 未找到 app.ico
