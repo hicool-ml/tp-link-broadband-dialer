@@ -10,43 +10,37 @@ import os
 import subprocess
 import ctypes
 import atexit
+from pathlib import Path
 
 # 设置 Playwright 浏览器路径（用于 PyInstaller 打包后的环境）
+def resource_path(relative_path):
+    """获取 PyInstaller 打包后的资源绝对路径"""
+    try:
+        # PyInstaller 创建临时文件夹，将路径存储在 _MEIPASS 中
+        base_path = sys._MEIPASS
+    except Exception:
+        # 如果不是打包环境，使用当前文件所在目录
+        base_path = os.path.abspath(".")
+    
+    return os.path.join(base_path, relative_path)
+
+# 强制 Playwright 使用打包后的本地浏览器
 if getattr(sys, 'frozen', False):
     # PyInstaller 打包后的环境
-    if sys.platform == 'win32':
-        # 设置 PLAYWRIGHT_BROWSERS_PATH 环境变量
-        # 指向 _internal 目录中的浏览器文件
-        internal_dir = os.path.join(sys._MEIPASS, '_internal')
-        # 尝试多个可能的路径
-        possible_paths = [
-            os.path.join(internal_dir, 'ms-playwright'),
-            os.path.join(internal_dir, 'ms-playwright', 'chromium-1208'),
-            os.path.join(sys._MEIPASS, 'ms-playwright'),
-            os.path.join(sys._MEIPASS, 'ms-playwright', 'chromium-1208'),
-        ]
-        
-        playwright_browsers_path = None
-        for path in possible_paths:
-            if os.path.exists(path):
-                playwright_browsers_path = path
-                print(f"Found Playwright browsers at: {playwright_browsers_path}")
-                break
-        
-        if playwright_browsers_path:
-            os.environ['PLAYWRIGHT_BROWSERS_PATH'] = playwright_browsers_path
-            print(f"Set PLAYWRIGHT_BROWSERS_PATH to: {playwright_browsers_path}")
-        else:
-            print("Warning: Playwright browser files not found in packaged environment")
-            print(f"Searching in: {internal_dir}")
-            print(f"Available directories:")
-            try:
-                for item in os.listdir(internal_dir):
-                    item_path = os.path.join(internal_dir, item)
-                    if os.path.isdir(item_path):
-                        print(f"  - {item}")
-            except:
-                pass
+    browsers_path = resource_path("ms-playwright")
+    if os.path.exists(browsers_path):
+        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = browsers_path
+        print(f"Set PLAYWRIGHT_BROWSERS_PATH to: {browsers_path}")
+    else:
+        print(f"Warning: Playwright browsers not found at: {browsers_path}")
+        print(f"Available directories in {resource_path('')}:")
+        try:
+            for item in os.listdir(resource_path('')):
+                item_path = os.path.join(resource_path(''), item)
+                if os.path.isdir(item_path):
+                    print(f"  - {item}")
+        except:
+            pass
 
 # 尝试导入PIL和pystray（可选依赖）
 try:

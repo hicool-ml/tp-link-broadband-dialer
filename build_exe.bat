@@ -36,6 +36,7 @@ python -m PyInstaller --onefile ^
     --add-data="error.ico;." ^
     --add-data="offline.ico;." ^
     --add-data="online.ico;." ^
+    --add-data="ms-playwright;ms-playwright" ^
     --hidden-import=tkinter ^
     --hidden-import=queue ^
     --hidden-import=threading ^

@@ -84,13 +84,13 @@ Section "Main Program" SecMain
   
   ; Create desktop shortcut
   DetailPrint "Creating desktop shortcut..."
-  CreateShortCut "$DESKTOP\$(DESC_SHORTCUT).lnk" "$INSTDIR\${APP_EXE}" "" "$INSTDIR\${APP_ICON}" 0
+  CreateShortCut "$DESKTOP\宽带拨号.lnk" "$INSTDIR\${APP_EXE}" "" "$INSTDIR\${APP_ICON}" 0
   
   ; Create start menu shortcuts
   DetailPrint "Creating start menu shortcuts..."
-  CreateDirectory "$SMPROGRAMS\$(DESC_APP_NAME)"
-  CreateShortCut "$SMPROGRAMS\$(DESC_APP_NAME)\$(DESC_SHORTCUT).lnk" "$INSTDIR\${APP_EXE}" "" "$INSTDIR\${APP_ICON}" 0
-  CreateShortCut "$SMPROGRAMS\$(DESC_APP_NAME)\Uninstall.lnk" "$INSTDIR\uninstall.exe"
+  CreateDirectory "$SMPROGRAMS\宽带拨号工具"
+  CreateShortCut "$SMPROGRAMS\宽带拨号工具\宽带拨号.lnk" "$INSTDIR\${APP_EXE}" "" "$INSTDIR\${APP_ICON}" 0
+  CreateShortCut "$SMPROGRAMS\宽带拨号工具\卸载.lnk" "$INSTDIR\uninstall.exe"
   
   ; Write registry entries
   DetailPrint "Writing registry entries..."
@@ -132,8 +132,8 @@ Section "Uninstall"
   
   ; Delete shortcuts
   DetailPrint "Deleting shortcuts..."
-  Delete "$DESKTOP\$(DESC_SHORTCUT).lnk"
-  RMDir /r "$SMPROGRAMS\$(DESC_APP_NAME)"
+  Delete "$DESKTOP\宽带拨号.lnk"
+  RMDir /r "$SMPROGRAMS\宽带拨号工具"
   
   ; Delete registry entries
   DetailPrint "Cleaning registry..."
