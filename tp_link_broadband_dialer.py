@@ -224,8 +224,8 @@ class RouterLoginGUI:
         try:
             if sys.platform == "win32":
                 # 定义Windows API函数
-                # 1. SetProcessShutdownParameters - 设置关机参数
-                #    使应用程序在关机时获得更多时间来清理
+                # SetProcessShutdownParameters - 设置关机参数
+                # 使应用程序在关机时获得更多时间来清理
                 SHUTDOWN_NORETRY = 0x1
                 
                 # 定义函数原型
@@ -245,29 +245,6 @@ class RouterLoginGUI:
                     self.log("✅ 已注册Windows关机拦截（高优先级）")
                 else:
                     self.log("⚠️ 关机拦截注册失败")
-                
-                # 2. 定义 ShutdownBlockReasonCreate API
-                #    用于在关机时显示阻止原因
-                try:
-                    user32 = ctypes.windll.user32
-                    user32.ShutdownBlockReasonCreate.argtypes = [
-                        ctypes.c_void_p,  # hWnd
-                        ctypes.c_wchar_p  # pwszReason
-                    ]
-                    user32.ShutdownBlockReasonCreate.restype = ctypes.c_bool
-                    
-                    user32.ShutdownBlockReasonDestroy.argtypes = [
-                        ctypes.c_void_p  # hWnd
-                    ]
-                    user32.ShutdownBlockReasonDestroy.restype = ctypes.c_bool
-                    
-                    # 保存API引用
-                    self._ShutdownBlockReasonCreate = user32.ShutdownBlockReasonCreate
-                    self._ShutdownBlockReasonDestroy = user32.ShutdownBlockReasonDestroy
-                    
-                    self.log("✅ 已初始化关机阻止API")
-                except Exception as e:
-                    self.log(f"⚠️ 初始化关机阻止API失败: {e}")
                     
         except Exception as e:
             self.log(f"⚠️ 注册关机拦截失败: {e}")
@@ -276,6 +253,10 @@ class RouterLoginGUI:
         """系统关机事件处理"""
         # 如果有保存的账号，需要先断开并清除
         if self.saved_account:
+            self.log("=" * 50)
+            self.log("检测到系统关机事件，账号未断开！")
+            self.log("=" * 50)
+            
             # 防止重复触发关闭事件
             if self.is_closing:
                 self.log("⚠️ 关闭操作正在进行中，请稍候...")
@@ -285,37 +266,25 @@ class RouterLoginGUI:
             # 设置关闭标志
             self.is_closing = True
             
-            self.log("=" * 50)
-            self.log("检测到系统关机事件")
-            self.log("=" * 50)
+            # 显示提醒对话框
+            warning_message = (
+                "⚠️ 警告：检测到系统关机！\n\n"
+                "您的宽带账号密码仍保存在路由器中！\n\n"
+                "为了账号安全，请先断开连接并清除账号密码。\n\n"
+                "是否立即执行断开并清除操作？"
+            )
             
-            # 使用Windows API阻止关机
-            try:
-                if hasattr(self, '_ShutdownBlockReasonCreate'):
-                    hwnd = self.root.winfo_id()
-                    reason = "正在清除宽带账号密码，请稍候..."
-                    
-                    # 调用 ShutdownBlockReasonCreate 阻止关机
-                    result = self._ShutdownBlockReasonCreate(hwnd, reason)
-                    if result:
-                        self.log("✅ 已阻止系统关机")
-                    else:
-                        self.log("⚠️ 阻止关机失败")
-            except Exception as e:
-                self.log(f"⚠️ 调用关机阻止API失败: {e}")
+            # 使用消息框询问用户
+            response = messagebox.askyesno(
+                "安全警告",
+                warning_message,
+                icon=messagebox.WARNING,
+                default=messagebox.YES
+            )
             
-            # 使用after方法在稍后执行，避免阻塞WM_QUERYENDSESSION
-            def show_warning_and_cleanup():
-                # 显示警告对话框
-                warning_message = (
-                    "⚠️ 警告：检测到系统关机！\n\n"
-                    "您的宽带账号密码仍保存在路由器中！\n\n"
-                    "为了账号安全，程序将自动执行断开并清除操作。\n\n"
-                    "请稍候，清理完成后可以安全关机..."
-                )
-                
-                # 显示警告消息（非阻塞）
-                messagebox.showwarning("安全警告", warning_message)
+            if response:
+                # 用户选择执行断开操作
+                self.log("用户选择执行断开并清除操作")
                 
                 # 停止进度条（如果正在运行）
                 self.stop_progress()
@@ -344,57 +313,59 @@ class RouterLoginGUI:
                 thread.start()
                 
                 # 等待断开完成，最多等待30秒
-                def wait_for_disconnect():
-                    if disconnect_complete.wait(timeout=30):
-                        # 检查断开是否成功
-                        if disconnect_result[0]:
-                            self.log("✅ 断开并清除成功")
-                            # 显示成功消息
-                            messagebox.showinfo(
-                                "清理完成",
-                                "✅ 账号密码已成功清除！\n\n现在可以安全关机了。\n\n请手动关闭程序或继续关机。"
-                            )
-                        else:
-                            self.log("=" * 50)
-                            self.log("❌ 验证失败：账号密码未完全清除")
-                            self.log("=" * 50)
-                            # 显示失败消息
-                            messagebox.showwarning(
-                                "清理失败",
-                                "❌ 账号密码清除失败！\n\n"
-                                "请手动检查路由器配置，或点击【断开连接】按钮重试。\n\n"
-                                "建议您在关机前手动清除账号。"
-                            )
-                    else:
-                        self.log("⚠️ 断开操作超时")
-                        # 显示超时消息
-                        messagebox.showwarning(
-                            "操作超时",
-                            "⚠️ 断开操作超时（30秒）！\n\n"
-                            "请检查路由器是否正常工作。\n\n"
-                            "建议您在关机前手动清除账号。"
+                if disconnect_complete.wait(timeout=30):
+                    # 检查断开是否成功
+                    if disconnect_result[0]:
+                        self.log("✅ 断开并清除成功")
+                        # 显示成功消息
+                        messagebox.showinfo(
+                            "清理完成",
+                            "✅ 账号密码已成功清除！\n\n现在可以安全关机了。"
                         )
-                    
-                    # 释放关机阻止
-                    try:
-                        if hasattr(self, '_ShutdownBlockReasonDestroy'):
-                            hwnd = self.root.winfo_id()
-                            self._ShutdownBlockReasonDestroy(hwnd)
-                            self.log("✅ 已释放关机阻止")
-                    except Exception as e:
-                        self.log(f"⚠️ 释放关机阻止失败: {e}")
-                    
-                    # 重置关闭标志，允许用户手动关闭程序
+                        # 重置关闭标志
+                        self.is_closing = False
+                        # 返回True允许关机
+                        return True
+                    else:
+                        self.log("=" * 50)
+                        self.log("❌ 验证失败：账号密码未完全清除")
+                        self.log("=" * 50)
+                        # 显示失败消息
+                        messagebox.showwarning(
+                            "清理失败",
+                            "❌ 账号密码清除失败！\n\n"
+                            "请手动检查路由器配置，或点击【断开连接】按钮重试。"
+                        )
+                        # 重置关闭标志
+                        self.is_closing = False
+                        # 返回True允许关机
+                        return True
+                else:
+                    self.log("⚠️ 断开操作超时")
+                    # 显示超时消息
+                    messagebox.showwarning(
+                        "操作超时",
+                        "⚠️ 断开操作超时（30秒）！\n\n"
+                        "请检查路由器是否正常工作。"
+                    )
+                    # 重置关闭标志
                     self.is_closing = False
-                
-                # 在100ms后开始检查（给GUI一点时间更新日志）
-                self.root.after(100, wait_for_disconnect)
-            
-            # 在100ms后执行警告和清理（给WM_QUERYENDSESSION返回的时间）
-            self.root.after(100, show_warning_and_cleanup)
-            
-            # 返回False阻止关机
-            return False
+                    # 返回True允许关机
+                    return True
+            else:
+                # 用户选择不执行断开操作
+                self.log("用户取消断开操作")
+                # 显示警告消息
+                messagebox.showwarning(
+                    "安全警告",
+                    "⚠️ 您选择不清除账号密码！\n\n"
+                    "账号密码可能仍保存在路由器中，存在泄露风险！\n\n"
+                    "建议您在关机前手动点击【断开连接】按钮清除账号。"
+                )
+                # 重置关闭标志
+                self.is_closing = False
+                # 返回False阻止关机（用户已知晓风险但仍需阻止）
+                return False
         else:
             # 没有保存的账号，直接允许关机
             self.log("系统关机：无保存的账号，允许关机")
