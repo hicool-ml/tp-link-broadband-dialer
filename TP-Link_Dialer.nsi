@@ -6,16 +6,16 @@
 !define LOCALAPPDATA $%LOCALAPPDATA%
 
 ; Application Information
-!define APP_NAME "TP-Link宽带拨号"
+!define APP_NAME "Broadband Dialer"
 !define APP_VERSION "1.0.0"
 !define APP_PUBLISHER "Kilo Code"
 !define APP_EXE "TP-Link_Dialer.exe"
-!define APP_DIR "TP-Link_Dialer"
+!define APP_DIR "Broadband_Dialer"
 !define APP_ICON "app.ico"
 
 ; Installer Configuration
 Name "${APP_NAME}"
-OutFile "发布包\TP-Link_Dialer_Setup.exe"
+OutFile "发布包\Broadband_Dialer_Setup.exe"
 InstallDir "$PROGRAMFILES64\${APP_DIR}"
 InstallDirRegKey HKLM "Software\${APP_DIR}" "InstallPath"
 RequestExecutionLevel admin
