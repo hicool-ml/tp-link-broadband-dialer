@@ -26,27 +26,22 @@ echo.
 
 :: 检查浏览器目录是否存在
 echo [2/5] 检查浏览器文件...
-if not exist "chromium-mini\chrome.exe" (
-    if not exist "ms-playwright\chromium-1208\chrome-win64\chrome.exe" (
-        echo ❌ 错误: 未找到浏览器文件！
-        echo.
-        echo 请先执行以下步骤之一：
-        echo.
-        echo 方案1：使用精简版浏览器（推荐，体积最小）
-        echo   1. 下载 Chromium 128.x: playwright install chromium@128.0.6613.119 --only-shell --with-deps
-        echo   2. 复制到项目: xcopy "%LOCALAPPDATA%\ms-playwright\chromium-1280\chrome-win64" "chromium-mini" /E /I /Y
-        echo   3. 裁剪浏览器: 删除 chromium-mini\locales、chromium-mini\resources\extensions 等
-        echo.
-        echo 方案2：使用完整版浏览器（体积较大）
-        echo   1. 下载 Chromium: playwright install chromium --with-deps
-        echo   2. 复制到项目: xcopy "%LOCALAPPDATA%\ms-playwright" "ms-playwright" /E /I /Y
-        echo.
-        pause
-        exit /b 1
-    )
+if exist "chrome-win64\chrome.exe" (
+    echo ✅ 找到项目自带浏览器: chrome-win64\chrome.exe
+) else if exist "chromium-mini\chrome.exe" (
+    echo ✅ 找到精简版浏览器: chromium-mini\chrome.exe
+) else if exist "ms-playwright\chromium-1208\chrome-win64\chrome.exe" (
     echo ✅ 找到完整版浏览器: ms-playwright\chromium-1208\chrome-win64\chrome.exe
 ) else (
-    echo ✅ 找到精简版浏览器: chromium-mini\chrome.exe
+    echo ❌ 错误: 未找到浏览器文件！
+    echo.
+    echo 请将 Chrome 浏览器文件放在以下位置之一：
+    echo   1. chrome-win64\chrome.exe（项目自带，推荐）
+    echo   2. chromium-mini\chrome.exe（精简版）
+    echo   3. ms-playwright\chromium-1208\chrome-win64\chrome.exe（完整版）
+    echo.
+    pause
+    exit /b 1
 )
 echo.
 
@@ -63,7 +58,10 @@ echo [4/5] 使用 PyInstaller 打包 EXE...
 echo.
 
 :: 根据浏览器类型选择打包参数
-if exist "chromium-mini\chrome.exe" (
+if exist "chrome-win64\chrome.exe" (
+    echo 📦 使用项目自带浏览器打包...
+    set "BROWSER_DATA=chrome-win64;chrome-win64"
+) else if exist "chromium-mini\chrome.exe" (
     echo 📦 使用精简版浏览器打包...
     set "BROWSER_DATA=chromium-mini;chromium-mini"
 ) else (

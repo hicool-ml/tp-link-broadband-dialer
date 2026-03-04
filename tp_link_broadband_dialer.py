@@ -30,10 +30,12 @@ os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "0"  # 禁用默认路径
 # 2. 验证内置浏览器是否存在（避免打包遗漏）
 def check_browser():
     """验证内置浏览器是否存在"""
-    # 尝试多个可能的浏览器路径
+    # 尝试多个可能的浏览器路径（按优先级排序）
     possible_paths = [
+        "chrome-win64/chrome.exe",  # 项目自带的 Chrome 浏览器（优先使用）
         "chromium-mini/chrome.exe",  # 精简版浏览器
         "ms-playwright/chromium-1208/chrome-win64/chrome.exe",  # 完整版浏览器
+        "_internal/chrome-win64/chrome.exe",  # PyInstaller打包后的路径（项目自带）
         "_internal/ms-playwright/chromium-1208/chrome-win64/chrome.exe",  # PyInstaller打包后的路径
     ]
     
