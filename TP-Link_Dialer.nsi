@@ -64,6 +64,17 @@ Section "Main Program" SecMain
   ; Copy documentation
   File "license.txt"
   
+  ; Copy Playwright browser drivers
+  DetailPrint "Copying Playwright browser drivers..."
+  SetOutPath $INSTDIR\playwright-drivers
+  File /r "%LOCALAPPDATA%\ms-playwright\chromium-1208\*.*"
+  
+  ; Set environment variable for Playwright browsers path
+  DetailPrint "Configuring Playwright browser path..."
+  WriteRegStr HKLM "SYSTEM\CurrentControlSet\Control\Session Manager\Environment" "PLAYWRIGHT_BROWSERS_PATH" "$INSTDIR\playwright-drivers"
+  
+  SetOutPath $INSTDIR
+  
   ; Create desktop shortcut
   DetailPrint "Creating desktop shortcut..."
   CreateShortCut "$DESKTOP\${APP_NAME}.lnk" "$INSTDIR\${APP_EXE}" "" "$INSTDIR\${APP_ICON}" 0
@@ -103,6 +114,14 @@ Section "Uninstall"
   Delete "$INSTDIR\online.ico"
   Delete "$INSTDIR\license.txt"
   Delete "$INSTDIR\uninstall.exe"
+  
+  ; Delete Playwright browser drivers
+  DetailPrint "Deleting Playwright browser drivers..."
+  RMDir /r "$INSTDIR\playwright-drivers"
+  
+  ; Remove environment variable
+  DetailPrint "Removing Playwright browser path environment variable..."
+  DeleteRegValue HKLM "SYSTEM\CurrentControlSet\Control\Session Manager\Environment" "PLAYWRIGHT_BROWSERS_PATH"
   
   ; Delete shortcuts
   DetailPrint "Deleting shortcuts..."

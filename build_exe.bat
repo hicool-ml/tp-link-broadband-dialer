@@ -45,7 +45,10 @@ python -m PyInstaller --onefile ^
     --hidden-import=subprocess ^
     --hidden-import=atexit ^
     --hidden-import=tempfile ^
-    --collect-all=submodules ^
+    --hidden-import=playwright ^
+    --hidden-import=playwright.sync_api ^
+    --collect-all playwright ^
+    --collect-all submodules ^
     --noconfirm ^
     tp_link_broadband_dialer.py
 
