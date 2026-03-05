@@ -29,16 +29,512 @@ import win32api
 import win32gui
 import win32process
 
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+TP-Link路由器宽带拨号工具 - Windows服务版本
+
+作为系统服务运行，可以在关机时更可靠地拦截关机事件并执行断开拨号操作。
+
+特性：
+- 作为Windows服务运行，关机优先级高
+- 接受SERVICE_CONTROL_SHUTDOWN控制码
+- 关机超时时间最长可达3分钟（默认30秒）
+- 自动启动，无需用户登录
+- 独立于GUI，无需图形界面
+"""
+
+import os
+import sys
+import time
+import logging
+import threading
+import subprocess
+from pathlib import Path
+import win32service
+import win32serviceutil
+import win32event
+import win32con
+import servicemanager
+
 # 导入主程序的核心功能
 from tp_link_broadband_dialer import (
     get_resource_path,
-    check_browser,
-    TPLinkBroadbandDialer
+    check_browser
 )
+
+# 导入Playwright
+from playwright.sync_api import sync_playwright
+import re
+
+
+class TPLinkBroadbandDialer:
+    """TP-Link宽带拨号器（无GUI版本）"""
+    
+    def __init__(self, router_ip="192.168.1.1", router_password="Cdu@123"):
+        """初始化拨号器
+        
+        Args:
+            router_ip: 路由器IP地址
+            router_password: 路由器管理员密码
+        """
+        self.router_ip = router_ip
+        self.router_password = router_password
+        self.saved_account = ""
+        self.saved_password = ""
+        self.logger = logging.getLogger(__name__)
+        
+    def connect(self, account, password):
+        """连接拨号
+        
+        Args:
+            account: 宽带账号
+            password: 宽带密码
+            
+        Returns:
+            bool: 是否连接成功
+        """
+        try:
+            self.logger.info("=" * 50)
+            self.logger.info("开始连接流程...")
+            self.logger.info(f"账号: {account}")
+            self.logger.info(f"密码: {'*' * len(password)}")
+            self.logger.info("=" * 50)
+            
+            # 保存账号密码
+            self.saved_account = account
+            self.saved_password = password
+            
+            # 用于存储捕获的 stok
+            captured_stok = []
+            
+            def capture_stok(route, request):
+                """捕获包含 stok 的请求"""
+                url = request.url
+                if "stok=" in url:
+                    match = re.search(r"stok=([^/&?#]+)", url)
+                    if match and not captured_stok:
+                        stok_value = match.group(1)
+                        captured_stok.append(stok_value)
+                        self.logger.info(f"捕获到 stok: {stok_value}")
+                route.continue_()
+            
+            with sync_playwright() as p:
+                self.logger.info("正在启动浏览器...")
+                
+                # 获取内置浏览器路径
+                executable_path = None
+                try:
+                    executable_path = check_browser()
+                    self.logger.info(f"使用内置浏览器: {executable_path}")
+                except RuntimeError as e:
+                    self.logger.warning(f"{e}")
+                    if not getattr(sys, 'frozen', False):
+                        self.logger.info("开发环境：使用系统默认浏览器")
+                    else:
+                        raise
+                
+                # 启动浏览器
+                launch_options = {
+                    'headless': True,
+                    'slow_mo': 300,
+                    'args': [
+                        "--no-sandbox",
+                        "--disable-gpu",
+                        "--disable-dev-shm-usage",
+                        "--disable-extensions",
+                        "--disable-plugins",
+                        "--lang=zh-CN",
+                        "--disable-web-security",
+                        "--disable-features=VizDisplayCompositor",
+                    ],
+                    'handle_sigint': False,
+                }
+                
+                if executable_path:
+                    launch_options['executable_path'] = executable_path
+                
+                browser = p.chromium.launch(**launch_options)
+                context = browser.new_context()
+                page = context.new_page()
+                
+                # 设置路由来监听所有请求
+                page.route("**/*", capture_stok)
+                
+                self.logger.info("正在访问路由器管理页面...")
+                page.goto(f"http://{self.router_ip}/")
+                
+                # 登录
+                page.wait_for_selector("input[type='password']", timeout=10000)
+                page.fill("input[type='password']", self.router_password)
+                page.keyboard.press("Enter")
+                
+                self.logger.info("正在验证登录...")
+                
+                # 等待捕获到 stok
+                for i in range(15):
+                    time.sleep(1)
+                    if captured_stok:
+                        break
+                
+                # 停止监听
+                page.unroute("**/*", capture_stok)
+                
+                if not captured_stok:
+                    self.logger.error("登录失败")
+                    browser.close()
+                    return False
+                
+                stok = captured_stok[0]
+                self.logger.info("登录成功")
+                
+                # 等待页面加载
+                time.sleep(3)
+                
+                # 导航到上网设置
+                self.logger.info("正在进入路由设置...")
+                try:
+                    router_set_btn = page.wait_for_selector("#routerSetMbtn", timeout=5000)
+                    if router_set_btn:
+                        router_set_btn.click()
+                        time.sleep(2)
+                except:
+                    pass
+                
+                try:
+                    network_menu = page.wait_for_selector("#network_rsMenu", timeout=5000)
+                    if network_menu:
+                        network_menu.click()
+                        time.sleep(2)
+                except:
+                    pass
+                
+                # 配置拨号方式
+                self.logger.info("正在配置拨号方式...")
+                try:
+                    wan_sel = page.wait_for_selector("#wanSel .value", timeout=5000)
+                    if wan_sel:
+                        current_value = wan_sel.inner_text()
+                        
+                        if "宽带拨号上网" not in current_value and "PPPoE" not in current_value:
+                            wan_sel_box = page.wait_for_selector("#wanSel", timeout=5000)
+                            wan_sel_box.click()
+                            time.sleep(1)
+                            
+                            pppoe_option_selectors = [
+                                "#selOptsUlwanSel li:has-text('宽带拨号上网')",
+                                "#selOptsUlwanSel li[title='宽带拨号上网']",
+                                "li.option:has-text('宽带拨号上网')",
+                            ]
+                            
+                            for selector in pppoe_option_selectors:
+                                try:
+                                    pppoe_option = page.wait_for_selector(selector, timeout=1000)
+                                    if pppoe_option:
+                                        pppoe_option.click()
+                                        time.sleep(1)
+                                        break
+                                except:
+                                    continue
+                except Exception as e:
+                    self.logger.warning(f"配置拨号方式时出错: {e}")
+                
+                # 填写账号密码
+                self.logger.info("正在输入账号密码...")
+                
+                try:
+                    page.wait_for_selector("#name", timeout=10000)
+                    page.wait_for_selector("#psw", timeout=5000)
+                except:
+                    self.logger.error("无法找到账号密码输入框")
+                    browser.close()
+                    return False
+                
+                # 清空并填写账号
+                page.fill("#name", "")
+                page.fill("#name", account)
+                
+                # 清空并填写密码
+                page.fill("#psw", "")
+                page.fill("#psw", password)
+                
+                # 触发 blur 事件
+                page.locator("#psw").blur()
+                
+                time.sleep(1)
+                
+                # 点击连接（最多尝试3次）
+                max_attempts = 3
+                connection_success = False
+                
+                for attempt in range(1, max_attempts + 1):
+                    self.logger.info(f"正在进行第 {attempt}/{max_attempts} 次拨号...")
+                    
+                    # 点击连接按钮
+                    try:
+                        page.click("#save")
+                        self.logger.info("已点击保存按钮")
+                    except Exception as e:
+                        self.logger.warning(f"点击#save失败: {e}")
+                        try:
+                            page.click("button:has-text('保存'), button:has-text('连接'), .save-btn")
+                            self.logger.info("已点击备用按钮")
+                        except Exception as e2:
+                            self.logger.warning(f"点击备用按钮也失败: {e2}")
+                    
+                    self.logger.info("正在等待拨号完成（10秒）...")
+                    time.sleep(10)
+                    
+                    # 检查连接状态
+                    self.logger.info("正在检查连接状态...")
+                    try:
+                        time.sleep(3)
+                        
+                        # 获取IP地址
+                        self.logger.info("正在获取WAN IP地址...")
+                        ip_element = page.wait_for_selector("#wanIpLbl", timeout=5000)
+                        if ip_element:
+                            ip_address = ip_element.inner_text()
+                            self.logger.info(f"获取到IP地址: {ip_address}")
+                            
+                            if ip_address and ip_address != "0.0.0.0" and ip_address != "0.0.0.0 ":
+                                self.logger.info("=" * 50)
+                                self.logger.info("拨号成功！")
+                                self.logger.info(f"已获取IP地址: {ip_address}")
+                                self.logger.info("=" * 50)
+                                connection_success = True
+                                break
+                            else:
+                                if attempt < max_attempts:
+                                    self.logger.warning(f"拨号未成功（IP={ip_address}），准备重试...")
+                                    time.sleep(2)
+                                else:
+                                    self.logger.warning("多次尝试后仍无法获取有效IP")
+                        else:
+                            if attempt < max_attempts:
+                                self.logger.warning("无法获取IP地址元素，准备重试...")
+                                time.sleep(2)
+                    except Exception as e:
+                        if attempt < max_attempts:
+                            self.logger.warning(f"验证连接时出错，准备重试...")
+                            time.sleep(2)
+                
+                browser.close()
+                
+                if connection_success:
+                    return True
+                else:
+                    self.logger.error("拨号失败")
+                    return False
+                    
+        except Exception as e:
+            self.logger.error(f"连接时发生错误: {e}")
+            return False
+    
+    def disconnect(self):
+        """断开拨号并清除账号
+        
+        Returns:
+            bool: 是否成功清除账号密码
+        """
+        disconnect_success = False
+        try:
+            self.logger.info("=" * 50)
+            self.logger.info("开始断开流程...")
+            self.logger.info("=" * 50)
+            
+            # 用于存储捕获的 stok
+            captured_stok = []
+            
+            def capture_stok(route, request):
+                """捕获包含 stok 的请求"""
+                url = request.url
+                if "stok=" in url:
+                    match = re.search(r"stok=([^/&?#]+)", url)
+                    if match and not captured_stok:
+                        stok_value = match.group(1)
+                        captured_stok.append(stok_value)
+                        self.logger.info(f"捕获到 stok: {stok_value}")
+                route.continue_()
+            
+            with sync_playwright() as p:
+                self.logger.info("正在启动浏览器...")
+                
+                # 获取内置浏览器路径
+                executable_path = None
+                try:
+                    executable_path = check_browser()
+                    self.logger.info(f"使用内置浏览器: {executable_path}")
+                except RuntimeError as e:
+                    self.logger.warning(f"{e}")
+                    if not getattr(sys, 'frozen', False):
+                        self.logger.info("开发环境：使用系统默认浏览器")
+                    else:
+                        raise
+                
+                # 启动浏览器
+                launch_options = {
+                    'headless': True,
+                    'slow_mo': 300,
+                    'args': [
+                        "--no-sandbox",
+                        "--disable-gpu",
+                        "--disable-dev-shm-usage",
+                        "--disable-extensions",
+                        "--disable-plugins",
+                        "--lang=zh-CN",
+                        "--disable-web-security",
+                        "--disable-features=VizDisplayCompositor",
+                    ],
+                    'handle_sigint': False,
+                }
+                
+                if executable_path:
+                    launch_options['executable_path'] = executable_path
+                
+                browser = p.chromium.launch(**launch_options)
+                context = browser.new_context()
+                page = context.new_page()
+                
+                # 设置路由来监听所有请求
+                page.route("**/*", capture_stok)
+                
+                self.logger.info("正在访问路由器管理页面...")
+                page.goto(f"http://{self.router_ip}/")
+                
+                # 登录
+                page.wait_for_selector("input[type='password']", timeout=10000)
+                page.fill("input[type='password']", self.router_password)
+                page.keyboard.press("Enter")
+                
+                self.logger.info("正在验证登录...")
+                
+                # 等待捕获到 stok
+                for i in range(15):
+                    time.sleep(1)
+                    if captured_stok:
+                        break
+                
+                # 停止监听
+                page.unroute("**/*", capture_stok)
+                
+                if not captured_stok:
+                    self.logger.error("登录失败")
+                    browser.close()
+                    return False
+                
+                stok = captured_stok[0]
+                self.logger.info("登录成功")
+                
+                # 等待页面加载
+                time.sleep(3)
+                
+                # 导航到上网设置
+                self.logger.info("正在进入路由设置...")
+                try:
+                    router_set_btn = page.wait_for_selector("#routerSetMbtn", timeout=5000)
+                    if router_set_btn:
+                        router_set_btn.click()
+                        time.sleep(2)
+                except:
+                    pass
+                
+                try:
+                    network_menu = page.wait_for_selector("#network_rsMenu", timeout=5000)
+                    if network_menu:
+                        network_menu.click()
+                        time.sleep(2)
+                except:
+                    pass
+                
+                # 断开连接
+                self.logger.info("正在断开网络连接...")
+                try:
+                    disconnect_btn = page.wait_for_selector("#disconnect", timeout=5000)
+                    if disconnect_btn:
+                        disconnect_btn.click()
+                        time.sleep(2)
+                except:
+                    self.logger.warning("未找到断开按钮")
+                
+                # 清除账号密码
+                self.logger.info("正在清除账号密码...")
+                try:
+                    # 清空账号
+                    self.logger.info("正在清空账号输入框...")
+                    name_input = page.wait_for_selector("#name", timeout=5000)
+                    if name_input:
+                        name_input.fill("")
+                        self.logger.info("账号输入框已清空")
+                    
+                    # 清空密码
+                    self.logger.info("正在清空密码输入框...")
+                    psw_input = page.wait_for_selector("#psw", timeout=5000)
+                    if psw_input:
+                        psw_input.fill("")
+                        self.logger.info("密码输入框已清空")
+                    
+                    # 验证账号密码是否真的被清除了
+                    self.logger.info("正在验证账号密码是否已清除...")
+                    time.sleep(1)
+                    name_value = name_input.input_value()
+                    psw_value = psw_input.input_value()
+                    self.logger.info(f"验证结果：账号=[{name_value}], 密码=[{psw_value}]")
+                    
+                    if not name_value and not psw_value:
+                        self.logger.info("账号密码已清除")
+                        disconnect_success = True
+                    else:
+                        self.logger.error(f"清除失败：账号=[{name_value}], 密码=[{psw_value}]")
+                        disconnect_success = False
+                except Exception as e:
+                    self.logger.error(f"清除账号密码时出错: {e}")
+                    disconnect_success = False
+                
+                # 保存（保存空账号密码）
+                self.logger.info("正在保存配置...")
+                try:
+                    save_btn = page.wait_for_selector("#save", timeout=5000)
+                    if save_btn:
+                        save_btn.click()
+                        time.sleep(2)
+                except:
+                    self.logger.warning("保存配置时出错")
+                
+                self.logger.info("=" * 50)
+                if disconnect_success:
+                    self.logger.info("断开并清除完成")
+                else:
+                    self.logger.error("清除验证失败")
+                self.logger.info("=" * 50)
+                
+                time.sleep(2)
+                browser.close()
+                
+        except Exception as e:
+            self.logger.error(f"断开时发生错误: {e}")
+            disconnect_success = False
+        
+        # 清除保存的账号密码
+        self.saved_account = ""
+        self.saved_password = ""
+        
+        # 返回是否成功清除
+        return disconnect_success
+    
+    def stop(self):
+        """停止拨号器"""
+        self.logger.info("拨号器已停止")
 
 
 class TPLinkDialerService(win32serviceutil.ServiceFramework):
-    """TP-Link宽带拨号服务"""
+    """TP-Link宽带拨号服务
+    
+    服务职责：
+    - 在关机时自动断开拨号并清除账号信息
+    - 不负责连接拨号（由GUI控制面板负责）
+    - 不需要用户界面
+    """
 
     _svc_name_ = "TPLinkBroadbandDialer"
     _svc_display_name_ = "TP-Link宽带拨号服务"
@@ -50,8 +546,6 @@ class TPLinkDialerService(win32serviceutil.ServiceFramework):
         self.hWaitStop = win32event.CreateEvent(None, 0, 0, None)
         self.is_alive = True
         self.dialer = None
-        self.control_panel = None
-        self.control_panel_process = None
         
         # 设置日志
         self.setup_logging()
@@ -92,15 +586,6 @@ class TPLinkDialerService(win32serviceutil.ServiceFramework):
             except Exception as e:
                 self.logger.error(f"停止拨号器时出错: {e}")
         
-        # 关闭控制面板
-        if self.control_panel_process:
-            try:
-                self.logger.info("正在关闭控制面板...")
-                self.control_panel_process.terminate()
-                self.control_panel_process.wait(timeout=5)
-            except Exception as e:
-                self.logger.error(f"关闭控制面板时出错: {e}")
-        
         self.logger.info("服务已停止")
         
     def SvcShutdown(self):
@@ -122,40 +607,35 @@ class TPLinkDialerService(win32serviceutil.ServiceFramework):
         self.logger.info("关机清理完成，允许系统关机")
         
     def perform_shutdown_cleanup(self):
-        """执行关机前的清理操作"""
+        """执行关机前的清理操作
+        
+        功能：只要关机就删除路由器内的账号密码
+        """
         try:
-            # 如果有拨号器实例，使用它来断开和清除
-            if self.dialer and hasattr(self.dialer, 'router'):
-                self.logger.info("使用拨号器实例执行关机前清理...")
-                
-                # 断开拨号
-                if hasattr(self.dialer, 'disconnect_dialer'):
-                    self.logger.info("正在断开拨号...")
-                    try:
-                        success = self.dialer.disconnect_dialer()
-                        if success:
-                            self.logger.info("✓ 拨号已断开")
-                        else:
-                            self.logger.warning("✗ 拨号断开失败")
-                    except Exception as e:
-                        self.logger.error(f"断开拨号时出错: {e}")
-                
-                # 清除账号
-                if hasattr(self.dialer, 'clear_account'):
-                    self.logger.info("正在清除账号信息...")
-                    try:
-                        success = self.dialer.clear_account()
-                        if success:
-                            self.logger.info("✓ 账号信息已清除")
-                        else:
-                            self.logger.warning("✗ 账号清除失败")
-                    except Exception as e:
-                        self.logger.error(f"清除账号时出错: {e}")
+            self.logger.info("=" * 60)
+            self.logger.info("开始执行关机清理操作...")
+            self.logger.info("=" * 60)
+            
+            # 创建拨号器实例（如果还没有）
+            if not self.dialer:
+                self.logger.info("初始化拨号器...")
+                self.dialer = TPLinkBroadbandDialer()
+            
+            # 执行断开和清除操作
+            self.logger.info("正在断开拨号并清除账号...")
+            success = self.dialer.disconnect()
+            
+            if success:
+                self.logger.info("✓ 账号密码已成功清除")
             else:
-                self.logger.warning("拨号器实例不可用，无法执行清理操作")
+                self.logger.warning("✗ 账号密码清除失败")
+            
+            self.logger.info("=" * 60)
+            self.logger.info("关机清理操作完成")
+            self.logger.info("=" * 60)
                 
         except Exception as e:
-            self.logger.error(f"执行关机清理时出错: {e}")
+            self.logger.error(f"执行关机清理时出错: {e}", exc_info=True)
             
     def SvcDoRun(self):
         """服务主循环"""
@@ -170,11 +650,10 @@ class TPLinkDialerService(win32serviceutil.ServiceFramework):
             self.dialer = TPLinkBroadbandDialer()
             self.logger.info("拨号器初始化完成")
             
-            # 启动控制面板（可选）
-            self.start_control_panel()
-            
             # 进入主循环
             self.logger.info("进入服务主循环...")
+            self.logger.info("服务已就绪，等待关机事件...")
+            
             while self.is_alive:
                 # 等待停止信号，每秒检查一次
                 result = win32event.WaitForSingleObject(
@@ -187,49 +666,11 @@ class TPLinkDialerService(win32serviceutil.ServiceFramework):
                     break
                     
                 # 在这里可以添加定期任务
-                # 例如：检查连接状态、自动重连等
+                # 例如：检查连接状态、记录日志等
                 
         except Exception as e:
             self.logger.error(f"服务运行时出错: {e}", exc_info=True)
             self.ReportServiceStatus(win32service.SERVICE_STOPPED)
-            
-    def start_control_panel(self):
-        """启动GUI控制面板"""
-        try:
-            self.logger.info("正在启动控制面板...")
-            
-            # 获取当前Python解释器路径
-            python_exe = sys.executable
-            
-            # 获取主程序脚本路径
-            if getattr(sys, 'frozen', False):
-                # 打包后的EXE
-                script_path = os.path.join(
-                    os.path.dirname(sys.executable),
-                    'tp_link_broadband_dialer.exe'
-                )
-            else:
-                # 开发环境
-                script_path = os.path.join(
-                    os.path.dirname(__file__),
-                    'tp_link_broadband_dialer.py'
-                )
-            
-            # 启动控制面板进程
-            startupinfo = subprocess.STARTUPINFO()
-            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-            startupinfo.wShowWindow = win32con.SW_SHOW
-            
-            self.control_panel_process = subprocess.Popen(
-                [script_path],
-                startupinfo=startupinfo,
-                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
-            )
-            
-            self.logger.info(f"控制面板已启动 (PID: {self.control_panel_process.pid})")
-            
-        except Exception as e:
-            self.logger.error(f"启动控制面板时出错: {e}")
 
 
 def install_service():
