@@ -1,0 +1,17 @@
+# TP-Link宽带拨号服务 - 依赖项列表
+# 
+# 安装方法：
+# pip install -r requirements_service.txt
+
+# 核心依赖
+pywin32>=305  # Windows API支持
+playwright>=1.40.0  # 浏览器自动化
+
+# GUI依赖（tkinter通常随Python一起安装）
+# tkinter  # 通常不需要单独安装
+
+# 打包工具
+pyinstaller>=6.0.0  # 打包成EXE
+
+# 可选：加速依赖安装
+-i https://pypi.tuna.tsinghua.edu.cn/simple

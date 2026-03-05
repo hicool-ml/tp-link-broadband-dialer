@@ -71,12 +71,12 @@ Section "主程序" SecMain
   
   ; Create desktop shortcut
   DetailPrint "正在创建桌面快捷方式..."
-  CreateShortCut "$DESKTOP\宽带链接.lnk" "$INSTDIR\TP-Link_Dialer\${APP_EXE}" "" "$INSTDIR\${APP_ICON}" 0
+  CreateShortCut "$DESKTOP\宽带连接.lnk" "$INSTDIR\${APP_EXE}" "" "$INSTDIR\${APP_ICON}" 0
   
   ; Create start menu shortcuts
   DetailPrint "正在创建开始菜单快捷方式..."
   CreateDirectory "$SMPROGRAMS\宽带拨号工具"
-  CreateShortCut "$SMPROGRAMS\宽带拨号工具\宽带链接.lnk" "$INSTDIR\TP-Link_Dialer\${APP_EXE}" "" "$INSTDIR\${APP_ICON}" 0
+  CreateShortCut "$SMPROGRAMS\宽带拨号工具\宽带连接.lnk" "$INSTDIR\${APP_EXE}" "" "$INSTDIR\${APP_ICON}" 0
   CreateShortCut "$SMPROGRAMS\宽带拨号工具\卸载.lnk" "$INSTDIR\uninstall.exe"
   
   ; Write registry entries
@@ -115,7 +115,7 @@ Section "Uninstall"
   
   ; Delete shortcuts
   DetailPrint "正在删除快捷方式..."
-  Delete "$DESKTOP\宽带链接.lnk"
+  Delete "$DESKTOP\宽带连接.lnk"
   RMDir /r "$SMPROGRAMS\宽带拨号工具"
   
   ; Delete registry entries
