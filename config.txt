@@ -1,0 +1,11 @@
+;!@Install@!UTF-8!
+Title="宽带拨号工具 v2.0 安装"
+BeginPrompt="欢迎使用宽带拨号工具！\n\n此程序将安装：\n• 宽带拨号主程序\n• 后台清理服务（关机时自动清理账号）\n\n点击"确定"开始安装"
+Progress="yes"
+GUIFlags="8+32+64+256+4096"
+InstallPath="%TEMP%\\BroadbandDialer"
+ExtractTitle="正在解压安装文件..."
+ExtractPathText="请选择解压位置（建议使用默认路径）"
+ExtractDialogText="正在准备安装文件..."
+RunProgram="安装.bat"
+;!@InstallEnd@!

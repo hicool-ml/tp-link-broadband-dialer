@@ -12,6 +12,12 @@ import ctypes
 import atexit
 from pathlib import Path
 
+# 导入配置管理模块
+from config_manager import ConfigManager
+
+# 导入浏览器管理模块
+from browser_manager import BrowserManager
+
 # ========== 核心：强制程序只使用内置资源 ==========
 def get_resource_path(relative_path):
     """获取PyInstaller打包后的内置资源路径（无论是否单文件）"""
@@ -23,55 +29,47 @@ def get_resource_path(relative_path):
         base_path = Path(__file__).parent
     return str(base_path / relative_path)
 
-# 1. 禁用Playwright的自动更新/路径查找（关键：不读用户环境）
+# 禁用Playwright的自动更新
 os.environ["PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD"] = "1"
-os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "0"  # 禁用默认路径
 
-# 2. 验证内置浏览器是否存在（避免打包遗漏）
+# 创建浏览器管理器
+browser_manager = BrowserManager()
+
 def check_browser():
-    """验证内置浏览器是否存在"""
-    # 尝试多个可能的浏览器路径（按优先级排序）
-    possible_paths = [
-        "chrome-win64/chrome.exe",  # 项目自带的 Chrome 浏览器（优先使用）
-        "chromium-mini/chrome.exe",  # 精简版浏览器
-        "ms-playwright/chromium-1208/chrome-win64/chrome.exe",  # 完整版浏览器
-        "_internal/chrome-win64/chrome.exe",  # PyInstaller打包后的路径（项目自带）
-        "_internal/ms-playwright/chromium-1208/chrome-win64/chrome.exe",  # PyInstaller打包后的路径
-    ]
-    
-    for browser_path in possible_paths:
-        full_path = get_resource_path(browser_path)
-        if Path(full_path).exists():
-            print(f"✅ 找到内置浏览器: {full_path}")
-            # 给浏览器添加执行权限（兼容老旧Windows）
-            try:
-                os.chmod(full_path, 0o755)
-            except:
-                pass
-            return full_path
-    
-    # 如果找不到浏览器，抛出异常
-    raise RuntimeError(
-        f"❌ 内置浏览器缺失！\n"
-        f"程序无法运行，请重新打包！\n\n"
-        f"已尝试的路径：\n" +
-        "\n".join([f"  - {get_resource_path(p)}" for p in possible_paths])
-    )
+    """验证浏览器是否存在并返回路径"""
+    # 尝试使用共享浏览器
+    browser_path = browser_manager.get_browser_path()
 
-# 3. 设置浏览器可执行文件路径环境变量
+    if browser_path:
+        print(f"✅ 找到浏览器: {browser_path}")
+        # 给浏览器添加执行权限（兼容老旧Windows）
+        try:
+            os.chmod(browser_path, 0o755)
+        except:
+            pass
+        return browser_path
+
+    # 如果找不到浏览器，返回None（让调用方处理）
+    return None
+
+# 检查浏览器是否存在
 try:
     browser_exe = check_browser()
-    os.environ["CHROME_EXECUTABLE_PATH"] = browser_exe
-    print(f"✅ 设置 CHROME_EXECUTABLE_PATH: {browser_exe}")
-except RuntimeError as e:
-    print(str(e))
-    # 在开发环境中，如果没有浏览器，只显示警告
-    if not getattr(sys, 'frozen', False):
-        print("⚠️ 开发环境警告：未找到内置浏览器，将使用系统浏览器")
+    if browser_exe:
+        os.environ["CHROME_EXECUTABLE_PATH"] = browser_exe
+        print(f"✅ 浏览器就绪: {browser_exe}")
     else:
-        # 打包后的环境，必须要有浏览器
-        input("按回车退出...")
-        sys.exit(1)
+        print("⚠️ 未找到浏览器")
+        # 在开发环境中，只显示警告
+        if not getattr(sys, 'frozen', False):
+            print("⚠️ 开发环境：请先安装浏览器（运行 browser_manager.py）")
+        else:
+            # 打包后的环境，显示友好的错误提示
+            print("❌ 浏览器未安装！")
+            print("请重新安装程序或联系技术支持。")
+except Exception as e:
+    print(f"⚠️ 浏览器检查出错: {e}")
+    browser_exe = None
 
 # 尝试导入PIL和pystray（可选依赖）
 try:
@@ -119,14 +117,19 @@ class RouterLoginGUI:
 
         # 监听窗口最小化事件
         self.root.bind("<Unmap>", self.on_minimize)
-        
-        # 监听系统关机事件
-        self.root.protocol("WM_QUERYENDSESSION", self.on_shutdown_query)
-        
-        # 路由器配置
-        self.router_password = "Cdu@123"
-        self.router_ip = "192.168.1.1"
-        
+
+        # 路由器配置（从配置文件读取）
+        config_manager = ConfigManager()
+        config = config_manager.get_config()
+
+        # 获取路由器配置（如果配置无效则使用默认值）
+        self.router_ip = config.get('router_ip', '')
+        self.router_password = config.get('router_password', '')
+
+        # 如果没有配置 IP，使用默认值（首次运行时会显示配置向导）
+        if not self.router_ip:
+            self.router_ip = '192.168.1.1'
+
         # 保存的账号密码
         self.saved_account = ""
         self.saved_password = ""
@@ -160,10 +163,7 @@ class RouterLoginGUI:
         # 创建系统托盘图标（如果可用）
         if TRAY_AVAILABLE:
             self.create_tray_icon()
-        
-        # 注册Windows关机拦截
-        self.register_shutdown_block()
-        
+
         # 设置焦点到账号输入框
         self.account_entry.focus()
         
@@ -174,65 +174,9 @@ class RouterLoginGUI:
             self.hide_to_tray()
             return
 
-        # 如果没有托盘图标，执行正常的关闭流程
-        # 防止重复触发关闭事件
-        if self.is_closing:
-            self.log("⚠️ 关闭操作正在进行中，请稍候...")
-            return
-
-        # 如果有保存的账号，自动执行断开并清除
-        if self.saved_account:
-            # 设置关闭标志
-            self.is_closing = True
-
-            # 停止进度条（如果正在运行）
-            self.stop_progress()
-
-            self.log("=" * 50)
-            self.log("检测到窗口关闭，自动执行断开并清除...")
-            self.log("=" * 50)
-
-            # 创建断开完成的标志和结果
-            disconnect_complete = threading.Event()
-            disconnect_result = [False]  # 使用列表来在闭包中修改值
-
-            # 包装断开函数，完成后设置标志和结果
-            def disconnect_with_callback():
-                result = self.run_disconnect(close_on_success=False)
-                disconnect_result[0] = result
-                disconnect_complete.set()
-
-            # 在新线程中执行断开，避免阻塞GUI关闭
-            thread = threading.Thread(target=disconnect_with_callback)
-            thread.daemon = False  # 改为非守护线程，确保执行完成
-            thread.start()
-
-            # 等待断开完成，最多等待30秒
-            def wait_for_disconnect():
-                if disconnect_complete.wait(timeout=30):
-                    # 检查断开是否成功
-                    if disconnect_result[0]:
-                        self.log("✅ 断开并清除成功，关闭窗口...")
-                        self.root.destroy()
-                    else:
-                        self.log("=" * 50)
-                        self.log("❌ 验证失败：账号密码未完全清除")
-                        self.log("⚠️ 窗口将保持打开，请手动检查或重试")
-                        self.log("=" * 50)
-                        # 恢复按钮状态，允许用户重试
-                        self.update_button("disconnect", tk.NORMAL, "断开并清除")
-                        self.update_button("connect", tk.NORMAL)
-                        # 重置关闭标志
-                        self.is_closing = False
-                else:
-                    self.log("⚠️ 断开操作超时，强制关闭窗口...")
-                    self.root.destroy()
-
-            # 在100ms后开始检查（给GUI一点时间更新日志）
-            self.root.after(100, wait_for_disconnect)
-        else:
-            # 没有保存的账号，直接关闭
-            self.root.destroy()
+        # 直接关闭窗口
+        # 注意：后台服务会在关机时自动清除路由器账号
+        self.root.destroy()
 
     def on_minimize(self, event):
         """窗口最小化事件处理"""
@@ -244,158 +188,6 @@ class RouterLoginGUI:
             else:
                 self.log("提示: 系统托盘功能不可用，窗口保持可见")
     
-    def register_shutdown_block(self):
-        """注册Windows关机拦截"""
-        try:
-            if sys.platform == "win32":
-                # 定义Windows API函数
-                # SetProcessShutdownParameters - 设置关机参数
-                # 使应用程序在关机时获得更多时间来清理
-                SHUTDOWN_NORETRY = 0x1
-                
-                # 定义函数原型
-                ctypes.windll.kernel32.SetProcessShutdownParameters.argtypes = [
-                    ctypes.c_ulong,  # dwLevel
-                    ctypes.c_ulong   # dwFlags
-                ]
-                ctypes.windll.kernel32.SetProcessShutdownParameters.restype = ctypes.c_bool
-                
-                # 调用API
-                result = ctypes.windll.kernel32.SetProcessShutdownParameters(
-                    0x3FF,  # dwLevel - 最高优先级
-                    SHUTDOWN_NORETRY  # dwFlags - 不重试
-                )
-                
-                if result:
-                    self.log("✅ 已注册Windows关机拦截（高优先级）")
-                else:
-                    self.log("⚠️ 关机拦截注册失败")
-                    
-        except Exception as e:
-            self.log(f"⚠️ 注册关机拦截失败: {e}")
-    
-    def on_shutdown_query(self):
-        """系统关机事件处理"""
-        # 如果有保存的账号，需要先断开并清除
-        if self.saved_account:
-            self.log("=" * 50)
-            self.log("检测到系统关机事件，账号未断开！")
-            self.log("=" * 50)
-            
-            # 防止重复触发关闭事件
-            if self.is_closing:
-                self.log("⚠️ 关闭操作正在进行中，请稍候...")
-                # 返回False阻止关机
-                return False
-            
-            # 设置关闭标志
-            self.is_closing = True
-            
-            # 显示提醒对话框
-            warning_message = (
-                "⚠️ 警告：检测到系统关机！\n\n"
-                "您的宽带账号密码仍保存在路由器中！\n\n"
-                "为了账号安全，请先断开连接并清除账号密码。\n\n"
-                "是否立即执行断开并清除操作？"
-            )
-            
-            # 使用消息框询问用户
-            response = messagebox.askyesno(
-                "安全警告",
-                warning_message,
-                icon=messagebox.WARNING,
-                default=messagebox.YES
-            )
-            
-            if response:
-                # 用户选择执行断开操作
-                self.log("用户选择执行断开并清除操作")
-                
-                # 停止进度条（如果正在运行）
-                self.stop_progress()
-                
-                self.log("=" * 50)
-                self.log("正在执行断开并清除...")
-                self.log("=" * 50)
-                
-                # 创建断开完成的标志和结果
-                disconnect_complete = threading.Event()
-                disconnect_result = [False]  # 使用列表来在闭包中修改值
-                
-                # 包装断开函数，完成后设置标志和结果
-                def disconnect_with_callback():
-                    try:
-                        result = self.run_disconnect(close_on_success=False)
-                        disconnect_result[0] = result
-                    except Exception as e:
-                        self.log(f"❌ 断开操作出错: {e}")
-                    finally:
-                        disconnect_complete.set()
-                
-                # 在新线程中执行断开
-                thread = threading.Thread(target=disconnect_with_callback)
-                thread.daemon = False  # 改为非守护线程，确保执行完成
-                thread.start()
-                
-                # 等待断开完成，最多等待30秒
-                if disconnect_complete.wait(timeout=30):
-                    # 检查断开是否成功
-                    if disconnect_result[0]:
-                        self.log("✅ 断开并清除成功")
-                        # 显示成功消息
-                        messagebox.showinfo(
-                            "清理完成",
-                            "✅ 账号密码已成功清除！\n\n现在可以安全关机了。"
-                        )
-                        # 重置关闭标志
-                        self.is_closing = False
-                        # 返回True允许关机
-                        return True
-                    else:
-                        self.log("=" * 50)
-                        self.log("❌ 验证失败：账号密码未完全清除")
-                        self.log("=" * 50)
-                        # 显示失败消息
-                        messagebox.showwarning(
-                            "清理失败",
-                            "❌ 账号密码清除失败！\n\n"
-                            "请手动检查路由器配置，或点击【断开连接】按钮重试。"
-                        )
-                        # 重置关闭标志
-                        self.is_closing = False
-                        # 返回True允许关机
-                        return True
-                else:
-                    self.log("⚠️ 断开操作超时")
-                    # 显示超时消息
-                    messagebox.showwarning(
-                        "操作超时",
-                        "⚠️ 断开操作超时（30秒）！\n\n"
-                        "请检查路由器是否正常工作。"
-                    )
-                    # 重置关闭标志
-                    self.is_closing = False
-                    # 返回True允许关机
-                    return True
-            else:
-                # 用户选择不执行断开操作
-                self.log("用户取消断开操作")
-                # 显示警告消息
-                messagebox.showwarning(
-                    "安全警告",
-                    "⚠️ 您选择不清除账号密码！\n\n"
-                    "账号密码可能仍保存在路由器中，存在泄露风险！\n\n"
-                    "建议您在关机前手动点击【断开连接】按钮清除账号。"
-                )
-                # 重置关闭标志
-                self.is_closing = False
-                # 返回False阻止关机（用户已知晓风险但仍需阻止）
-                return False
-        else:
-            # 没有保存的账号，直接允许关机
-            self.log("系统关机：无保存的账号，允许关机")
-            return True
-        
     def create_widgets(self):
         # 标题
         title_label = tk.Label(
@@ -453,15 +245,15 @@ class RouterLoginGUI:
         )
         self.disconnect_button.pack(side=tk.LEFT, padx=8)
         
-        # 断开连接提示文字（红色，在两个按钮下方，居中显示）
-        disconnect_hint_label = tk.Label(
+        # 提示文字（蓝色，在两个按钮下方，居中显示）
+        hint_label = tk.Label(
             self.root,
-            text="为了您的账户安全，使用完成后请点击断开，系统会清除账号\n请耐心等待程序正常退出......",
+            text="提示：使用完成后可点击断开按钮清除账号\n系统关机时后台服务会自动清理路由器账号",
             font=("Microsoft YaHei", 9, "bold"),
-            fg="#FF0000",
+            fg="#0066CC",
             justify=tk.CENTER
         )
-        disconnect_hint_label.pack(pady=(5, 0))
+        hint_label.pack(pady=(5, 0))
         
         # 进度条（双击可查看日志）
         progress_frame = tk.Frame(self.root)
@@ -486,16 +278,29 @@ class RouterLoginGUI:
         self.progress_bar.bind("<Double-Button-1>", lambda e: self.toggle_debug_window())
         self.progress_label.bind("<Double-Button-1>", lambda e: self.toggle_debug_window())
 
-        # 状态栏
+        # 状态栏（包含设置按钮）
+        status_frame = tk.Frame(self.root)
+        status_frame.pack(side=tk.BOTTOM, fill=tk.X)
+
         self.status_label = tk.Label(
-            self.root,
+            status_frame,
             text="就绪 | 双击进度条可查看运行日志",
             font=("Microsoft YaHei", 9),
             bd=1,
             relief=tk.SUNKEN,
             anchor=tk.W
         )
-        self.status_label.pack(side=tk.BOTTOM, fill=tk.X)
+        self.status_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        # 设置按钮
+        settings_button = tk.Button(
+            status_frame,
+            text="⚙ 设置",
+            command=self.show_settings,
+            font=("Microsoft YaHei", 8),
+            width=6
+        )
+        settings_button.pack(side=tk.RIGHT, padx=1, pady=1)
         
     def toggle_debug_window(self):
         """切换调试窗口显示/隐藏"""
@@ -556,6 +361,10 @@ class RouterLoginGUI:
             self.debug_text.config(state=tk.NORMAL)
             self.debug_text.delete(1.0, tk.END)
             self.debug_text.config(state=tk.DISABLED)
+
+    def show_settings(self):
+        """显示设置对话框"""
+        show_reconfig_dialog(self.root)
     
     def process_log_queue(self):
         """处理日志队列（在主线程中执行）"""
@@ -1649,17 +1458,341 @@ class SingleInstanceChecker:
             print(f"Warning: Failed to release mutex: {e}")
 
 
+def show_config_wizard():
+    """显示配置向导"""
+    wizard_root = tk.Tk()
+    wizard_root.title("路由器配置向导")
+    wizard_root.geometry("500x400")
+    wizard_root.resizable(False, False)
+
+    # 居中显示
+    wizard_root.update_idletasks()
+    width = wizard_root.winfo_width()
+    height = wizard_root.winfo_height()
+    x = (wizard_root.winfo_screenwidth() // 2) - (width // 2)
+    y = (wizard_root.winfo_screenheight() // 2) - (height // 2)
+    wizard_root.geometry(f'{width}x{height}+{x}+{y}')
+
+    # 标题
+    title_label = tk.Label(
+        wizard_root,
+        text="欢迎使用宽带拨号工具",
+        font=("Microsoft YaHei", 18, "bold"),
+        fg="#333333"
+    )
+    title_label.pack(pady=(20, 10))
+
+    # 副标题
+    subtitle_label = tk.Label(
+        wizard_root,
+        text="首次使用需要配置路由器信息",
+        font=("Microsoft YaHei", 11),
+        fg="#666666"
+    )
+    subtitle_label.pack(pady=(0, 15))
+
+    # 说明框
+    info_frame = tk.Frame(wizard_root, bg="#E3F2FD", bd=1, relief=tk.SOLID)
+    info_frame.pack(pady=10, padx=40, fill=tk.X)
+
+    info_label = tk.Label(
+        info_frame,
+        text="ℹ️ 配置说明\n\n程序需要在关机时自动清理路由器账号\n请输入路由器的管理地址和管理员密码\n此信息将加密保存在本地",
+        font=("Microsoft YaHei", 9),
+        bg="#E3F2FD",
+        fg="#1565C0",
+        justify=tk.LEFT,
+        padx=15,
+        pady=10
+    )
+    info_label.pack(fill=tk.BOTH, expand=True)
+
+    # 路由器IP输入框
+    ip_frame = tk.Frame(wizard_root)
+    ip_frame.pack(pady=10, padx=40, fill=tk.X)
+
+    tk.Label(ip_frame, text="路由器IP地址：", font=("Microsoft YaHei", 10, "bold"), width=15, anchor=tk.W).pack(side=tk.LEFT, padx=5)
+    ip_entry = tk.Entry(ip_frame, font=("Microsoft YaHei", 10), width=25)
+    ip_entry.insert(0, "192.168.1.1")
+    ip_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+
+    # 路由器密码输入框
+    password_frame = tk.Frame(wizard_root)
+    password_frame.pack(pady=10, padx=40, fill=tk.X)
+
+    tk.Label(password_frame, text="路由器管理密码：", font=("Microsoft YaHei", 10, "bold"), width=15, anchor=tk.W).pack(side=tk.LEFT, padx=5)
+    password_entry = tk.Entry(password_frame, font=("Microsoft YaHei", 10), width=25, show="●")
+    password_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+
+    # 状态提示
+    status_label = tk.Label(
+        wizard_root,
+        text="",
+        font=("Microsoft YaHei", 9),
+        fg="#4CAF50",
+        wraplength=400
+    )
+    status_label.pack(pady=5)
+
+    # 错误提示
+    error_label = tk.Label(
+        wizard_root,
+        text="",
+        font=("Microsoft YaHei", 9),
+        fg="red",
+        wraplength=400
+    )
+    error_label.pack(pady=5)
+
+    # 结果存储
+    result = {'config': None, 'save': False}
+
+    def validate_and_save():
+        """验证并保存配置"""
+        # 清除之前的提示
+        error_label.config(text="")
+        status_label.config(text="")
+
+        router_ip = ip_entry.get().strip()
+        router_password = password_entry.get().strip()
+
+        # 验证IP
+        parts = router_ip.split('.')
+        if len(parts) != 4:
+            error_label.config(text="❌ IP地址格式不正确，应为：xxx.xxx.xxx.xxx")
+            return
+
+        try:
+            for part in parts:
+                num = int(part)
+                if num < 0 or num > 255:
+                    error_label.config(text="❌ IP地址格式不正确，每个数字应在0-255之间")
+                    return
+        except:
+            error_label.config(text="❌ IP地址格式不正确，只能包含数字和点号")
+            return
+
+        # 验证密码
+        if not router_password:
+            error_label.config(text="❌ 请输入路由器管理密码")
+            password_entry.focus()
+            return
+
+        # 显示保存中状态
+        status_label.config(text="💾 正在保存配置...")
+        wizard_root.update()
+
+        # 保存配置
+        config_manager = ConfigManager()
+        config = {
+            'router_ip': router_ip,
+            'router_password': router_password,
+            'version': '1.0'
+        }
+
+        if config_manager.save_config(config):
+            result['config'] = config
+            result['save'] = True
+
+            # 显示成功消息
+            status_label.config(text="✅ 配置保存成功！正在启动程序...", fg="#4CAF50")
+            wizard_root.update()
+
+            # 延迟关闭，让用户看到成功消息
+            wizard_root.after(1000, wizard_root.destroy)
+        else:
+            error_label.config(text="❌ 保存配置失败，请检查是否有写入权限")
+            status_label.config(text="")
+
+    def on_exit():
+        """退出程序"""
+        if result['save']:
+            wizard_root.destroy()
+        else:
+            # 提示用户
+            if messagebox.askyesno("确认退出", "未保存配置，程序将无法使用。\n\n确定要退出吗？"):
+                wizard_root.destroy()
+
+    # 绑定回车键到保存
+    wizard_root.bind('<Return>', lambda e: validate_and_save())
+
+    # 按钮区域
+    button_frame = tk.Frame(wizard_root)
+    button_frame.pack(pady=20)
+
+    save_button = tk.Button(
+        button_frame,
+        text="✓ 保存并启动",
+        command=validate_and_save,
+        font=("Microsoft YaHei", 11, "bold"),
+        bg="#4CAF50",
+        fg="white",
+        width=18,
+        height=2,
+        cursor="hand2"
+    )
+    save_button.pack(side=tk.LEFT, padx=8)
+
+    cancel_button = tk.Button(
+        button_frame,
+        text="✗ 退出",
+        command=on_exit,
+        font=("Microsoft YaHei", 10),
+        bg="#757575",
+        fg="white",
+        width=12,
+        height=2,
+        cursor="hand2"
+    )
+    cancel_button.pack(side=tk.LEFT, padx=8)
+
+    # 底部提示
+    footer_label = tk.Label(
+        wizard_root,
+        text="提示：配置可在程序设置中随时修改",
+        font=("Microsoft YaHei", 8),
+        fg="#999999"
+    )
+    footer_label.pack(side=tk.BOTTOM, pady=10)
+
+    # 设置焦点
+    ip_entry.focus()
+    ip_entry.select_range(0, tk.END)
+
+    wizard_root.mainloop()
+    return result
+
+
+def show_reconfig_dialog(parent_root):
+    """显示重新配置对话框"""
+    dialog = tk.Toplevel(parent_root)
+    dialog.title("路由器设置")
+    dialog.geometry("450x300")
+    dialog.resizable(False, False)
+    dialog.transient(parent_root)
+    dialog.grab_set()
+
+    # 标题
+    title_label = tk.Label(
+        dialog,
+        text="路由器配置",
+        font=("Microsoft YaHei", 14, "bold")
+    )
+    title_label.pack(pady=15)
+
+    # 当前配置显示
+    config_manager = ConfigManager()
+    current_config = config_manager.get_config()
+
+    # 路由器IP输入框
+    ip_frame = tk.Frame(dialog)
+    ip_frame.pack(pady=10, padx=30, fill=tk.X)
+
+    tk.Label(ip_frame, text="路由器IP地址:", font=("Microsoft YaHei", 10)).pack(side=tk.LEFT, padx=5)
+    ip_entry = tk.Entry(ip_frame, font=("Microsoft YaHei", 10), width=20)
+    ip_entry.insert(0, current_config.get('router_ip', '192.168.1.1'))
+    ip_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+
+    # 路由器密码输入框
+    password_frame = tk.Frame(dialog)
+    password_frame.pack(pady=10, padx=30, fill=tk.X)
+
+    tk.Label(password_frame, text="路由器管理密码:", font=("Microsoft YaHei", 10)).pack(side=tk.LEFT, padx=5)
+    password_entry = tk.Entry(password_frame, font=("Microsoft YaHei", 10), width=20, show="*")
+    password_entry.insert(0, current_config.get('router_password', ''))
+    password_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+
+    # 错误提示
+    error_label = tk.Label(
+        dialog,
+        text="",
+        font=("Microsoft YaHei", 9),
+        fg="red"
+    )
+    error_label.pack(pady=5)
+
+    def validate_and_save():
+        """验证并保存配置"""
+        router_ip = ip_entry.get().strip()
+        router_password = password_entry.get().strip()
+
+        # 验证IP
+        parts = router_ip.split('.')
+        if len(parts) != 4:
+            error_label.config(text="IP地址格式不正确")
+            return
+
+        try:
+            for part in parts:
+                num = int(part)
+                if num < 0 or num > 255:
+                    error_label.config(text="IP地址格式不正确")
+                    return
+        except:
+            error_label.config(text="IP地址格式不正确")
+            return
+
+        # 验证密码
+        if not router_password:
+            error_label.config(text="请输入路由器管理密码")
+            return
+
+        # 保存配置
+        config = {
+            'router_ip': router_ip,
+            'router_password': router_password,
+            'version': '1.0'
+        }
+
+        if config_manager.save_config(config):
+            messagebox.showinfo("成功", "路由器配置已保存！\n\n请重启程序使配置生效。")
+            dialog.destroy()
+        else:
+            error_label.config(text="保存配置失败，请重试")
+
+    # 按钮区域
+    button_frame = tk.Frame(dialog)
+    button_frame.pack(pady=20)
+
+    tk.Button(
+        button_frame,
+        text="保存",
+        command=validate_and_save,
+        font=("Microsoft YaHei", 10, "bold"),
+        bg="#4CAF50",
+        fg="white",
+        width=12
+    ).pack(side=tk.LEFT, padx=5)
+
+    tk.Button(
+        button_frame,
+        text="取消",
+        command=dialog.destroy,
+        font=("Microsoft YaHei", 10),
+        width=12
+    ).pack(side=tk.LEFT, padx=5)
+
+
 def main():
+    # 检查是否已配置
+    config_manager = ConfigManager()
+    if not config_manager.is_configured():
+        # 首次运行，显示配置向导
+        result = show_config_wizard()
+        if not result or not result['save']:
+            # 用户未保存配置，退出
+            sys.exit(0)
+
     # 单实例检查（静默拒绝，不弹出窗口）
     checker = SingleInstanceChecker()
     if checker.already_running():
         # 静默退出，不显示任何窗口
         print("Program is already running. Exiting silently...")
         sys.exit(0)
-    
+
     # 注册退出时释放锁
     atexit.register(checker.release)
-    
+
     try:
         root = tk.Tk()
         app = RouterLoginGUI(root)
