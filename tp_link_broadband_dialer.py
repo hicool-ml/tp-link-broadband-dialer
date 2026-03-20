@@ -1288,36 +1288,36 @@ class RouterLoginGUI:
                             time.sleep(2)
                     except:
                         pass
-                
-                # 使用正确的选择器
-                internet_menu_selectors = [
-                    "#network_rsMenu",
-                    "li#network_rsMenu",
-                    "li.menuLi",
-                    "li:has-text('上网设置')",
-                ]
-                
-                menu_clicked = False
-                for selector in internet_menu_selectors:
-                    try:
-                        menu_item = page.wait_for_selector(selector, timeout=2000)
-                        if menu_item:
-                            menu_item.click()
-                            menu_clicked = True
-                            time.sleep(2)
-                            break
-                    except:
-                        continue
 
-                if not menu_clicked:
-                    self.log("❌ 无法打开上网设置")
-                    browser.close()
-                    self.update_button("connect", tk.NORMAL, "开始连接")
-                    self.update_status("配置失败")
-                    self.stop_progress()
-                    # 弹窗提示用户
-                    self.log_queue.put("[SHOW_ERROR]无法打开上网设置，请检查路由器是否正常工作")
-                    return
+                    # 使用正确的选择器
+                    internet_menu_selectors = [
+                        "#network_rsMenu",
+                        "li#network_rsMenu",
+                        "li.menuLi",
+                        "li:has-text('上网设置')",
+                    ]
+
+                    menu_clicked = False
+                    for selector in internet_menu_selectors:
+                        try:
+                            menu_item = page.wait_for_selector(selector, timeout=2000)
+                            if menu_item:
+                                menu_item.click()
+                                menu_clicked = True
+                                time.sleep(2)
+                                break
+                        except:
+                            continue
+
+                    if not menu_clicked:
+                        self.log("❌ 无法打开上网设置")
+                        browser.close()
+                        self.update_button("connect", tk.NORMAL, "开始连接")
+                        self.update_status("配置失败")
+                        self.stop_progress()
+                        # 弹窗提示用户
+                        self.log_queue.put("[SHOW_ERROR]无法打开上网设置，请检查路由器是否正常工作")
+                        return
 
                 # ===== 设置随机WAN口MAC地址 =====
                 self.log("🔧 正在设置随机WAN口MAC地址...")
