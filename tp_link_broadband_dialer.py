@@ -1269,14 +1269,81 @@ class RouterLoginGUI:
                     self.log_queue.put("[SHOW_ERROR]无法打开上网设置，请检查路由器是否正常工作")
                     return
 
-                # ===== 设置随机WAN口MAC地址 =====
-                # 检查配置中是否启用了随机MAC功能
+                # ===== 设置WAN口MAC地址 =====
+                # 检查配置中的MAC模式
                 config_manager = ConfigManager()
                 config = config_manager.get_config()
-                random_mac_enabled = config.get('random_mac_enabled', False)
+                mac_mode = config.get('mac_mode', 'router')  # 默认使用路由器MAC
 
-                if random_mac_enabled:
-                    self.log("🔧 随机MAC功能已启用")
+                if mac_mode == 'router':
+                    # 模式1：使用路由器的MAC地址（默认）
+                    self.log("⏭️ MAC模式：使用路由器默认MAC")
+                    self.log("💡 提示：保持路由器当前MAC设置不变")
+
+                elif mac_mode == 'pc':
+                    # 模式2：使用当前管理PC的MAC地址
+                    self.log("🔧 MAC模式：使用当前管理PC的MAC地址")
+                    self.update_progress(50, "正在设置MAC地址......")
+
+                    try:
+                        # 等待页面完全加载
+                        self.log("   ⏳ 等待页面稳定（2秒）...")
+                        time.sleep(2)
+
+                        # 点击MAC地址下拉框，选择"使用PC的MAC"选项
+                        self.log("   🔍 查找WAN口MAC地址选择下拉框...")
+                        mac_sel_exists = page.query_selector("#wanMacSel")
+                        if mac_sel_exists:
+                            # 点击下拉框打开选项列表
+                            self.log("   📍 点击MAC地址下拉框...")
+                            page.click("#wanMacSel")
+                            time.sleep(1)
+
+                            # 查找并点击"使用PC的MAC"选项
+                            self.log("   🔍 查找'使用PC的MAC'选项...")
+                            pc_mac_selectors = [
+                                "#selOptsUlwanMacSel li:has-text('PC')",
+                                "#selOptsUlwanMacSel li:has-text('当前管理PC')",
+                                "#selOptsUlwanMacSel li:has-text('计算机')",
+                            ]
+
+                            option_clicked = False
+                            for selector in pc_mac_selectors:
+                                try:
+                                    pc_mac_option = page.wait_for_selector(selector, timeout=1000)
+                                    if pc_mac_option:
+                                        self.log("   ✅ 找到'使用PC的MAC'选项，正在点击...")
+                                        pc_mac_option.click()
+                                        option_clicked = True
+                                        time.sleep(1)
+                                        break
+                                except:
+                                    continue
+
+                            if option_clicked:
+                                # 点击保存按钮
+                                self.log("💾 正在保存MAC地址设置...")
+                                self.log("   按钮: #saveHighSet")
+                                save_btn_exists = page.query_selector("#saveHighSet")
+                                if save_btn_exists:
+                                    page.click("#saveHighSet")
+                                    self.log("✅ 已点击高级设置保存按钮")
+                                    time.sleep(3)
+                                    self.log("✅ MAC地址保存成功（路由器将使用PC的MAC）")
+                                else:
+                                    self.log("⚠️ 未找到保存按钮")
+                            else:
+                                self.log("⚠️ 未找到'使用PC的MAC'选项")
+                        else:
+                            self.log("⚠️ 未找到MAC地址下拉框")
+
+                    except Exception as e:
+                        self.log(f"⚠️ 设置MAC地址时出错: {e}")
+                        self.log("继续执行拨号流程...")
+
+                elif mac_mode == 'random':
+                    # 模式3：使用随机MAC地址
+                    self.log("🔧 MAC模式：使用随机MAC地址")
                     self.update_progress(50, "正在设置MAC地址......")
 
                     try:
@@ -1875,7 +1942,7 @@ def show_reconfig_dialog(parent_root):
     """
     dialog = tk.Toplevel(parent_root)
     dialog.title("路由器设置")
-    dialog.geometry("500x400")  # 增加高度以容纳高级选项
+    dialog.geometry("500x350")  # 恢复原始高度
     dialog.resizable(False, False)
     dialog.transient(parent_root)
     dialog.grab_set()
@@ -1913,14 +1980,14 @@ def show_reconfig_dialog(parent_root):
     password_entry.insert(0, current_config.get('router_password', ''))
     password_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
 
-    # 高级选项分隔线（使用tk.Frame代替ttk.Separator）
+    # 高级选项分隔线
     separator_frame = tk.Frame(dialog, height=2, bg="#CCCCCC")
     separator_frame.pack(pady=15, padx=30, fill=tk.X)
 
     # 高级选项标题
     advanced_label = tk.Label(
         dialog,
-        text="高级选项",
+        text="高级选项 - WAN口MAC地址设置",
         font=("Microsoft YaHei", 11, "bold"),
         fg="#666666"
     )
@@ -1930,29 +1997,38 @@ def show_reconfig_dialog(parent_root):
     advanced_container = tk.Frame(dialog)
     advanced_container.pack(pady=5, padx=30, fill=tk.X)
 
-    # 随机MAC地址开关
-    mac_frame = tk.Frame(advanced_container)
-    mac_frame.pack(fill=tk.X, pady=5)
-
-    random_mac_var = tk.BooleanVar(value=current_config.get('random_mac_enabled', False))
-    mac_checkbutton = tk.Checkbutton(
-        mac_frame,
-        text="启用随机MAC地址（每次拨号前使用随机MAC，可能提高成功率）",
-        variable=random_mac_var,
-        font=("Microsoft YaHei", 9),
-        justify=tk.LEFT,
-        anchor=tk.W
+    # MAC地址模式选择（使用下拉框）
+    mac_mode_label = tk.Label(
+        advanced_container,
+        text="MAC地址模式:",
+        font=("Microsoft YaHei", 10)
     )
-    mac_checkbutton.pack(fill=tk.X)
+    mac_mode_label.pack(anchor=tk.W, pady=(0, 5))
+
+    # MAC模式下拉框
+    mac_mode_var = tk.StringVar(value=current_config.get('mac_mode', 'router'))
+    mac_mode_combobox = ttk.Combobox(
+        advanced_container,
+        textvariable=mac_mode_var,
+        values=[
+            "使用路由器的MAC地址（推荐）",
+            "使用当前管理PC的MAC地址",
+            "使用随机MAC地址"
+        ],
+        state="readonly",  # 只能选择，不能手动输入
+        font=("Microsoft YaHei", 9),
+        width=45
+    )
+    mac_mode_combobox.pack(fill=tk.X, pady=(0, 5))
 
     # MAC地址提示
     mac_hint = tk.Label(
         advanced_container,
-        text="⚠️ 注意：某些运营商会绑定MAC地址，启用随机MAC可能导致拨号失败",
+        text="💡 提示：使用PC MAC时，路由器会自动获取当前连接PC的网卡MAC地址。\n⚠️ 注意：某些运营商会绑定MAC地址，使用随机MAC可能导致拨号失败。",
         font=("Microsoft YaHei", 8),
-        fg="#FF9800",
+        fg="#666666",
         justify=tk.LEFT,
-        wraplength=440  # 设置文字换行宽度
+        wraplength=440
     )
     mac_hint.pack(pady=(5, 0), anchor=tk.W)
 
@@ -1991,11 +2067,20 @@ def show_reconfig_dialog(parent_root):
             error_label.config(text="请输入路由器管理密码")
             return
 
+        # 将下拉框选择的文本转换为配置值
+        mac_mode_text = mac_mode_var.get()
+        mac_mode_mapping = {
+            "使用路由器的MAC地址（推荐）": "router",
+            "使用当前管理PC的MAC地址": "pc",
+            "使用随机MAC地址": "random"
+        }
+        mac_mode = mac_mode_mapping.get(mac_mode_text, 'router')
+
         # 保存配置
         config = {
             'router_ip': router_ip,
             'router_password': router_password,
-            'random_mac_enabled': random_mac_var.get(),
+            'mac_mode': mac_mode,  # 保存MAC模式
             'version': '1.0'
         }
 
