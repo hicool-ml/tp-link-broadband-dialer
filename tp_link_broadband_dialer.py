@@ -1277,8 +1277,64 @@ class RouterLoginGUI:
 
                 if mac_mode == 'router':
                     # 模式1：使用路由器的MAC地址（默认）
-                    self.log("⏭️ MAC模式：使用路由器默认MAC")
-                    self.log("💡 提示：保持路由器当前MAC设置不变")
+                    self.log("🔧 MAC模式：使用路由器的MAC地址")
+                    self.update_progress(50, "正在设置MAC地址......")
+
+                    try:
+                        # 等待页面完全加载
+                        self.log("   ⏳ 等待页面稳定（2秒）...")
+                        time.sleep(2)
+
+                        # 点击MAC地址下拉框，选择"使用路由器的MAC地址"选项
+                        self.log("   🔍 查找WAN口MAC地址选择下拉框...")
+                        mac_sel_exists = page.query_selector("#wanMacSel")
+                        if mac_sel_exists:
+                            # 点击下拉框打开选项列表
+                            self.log("   📍 点击MAC地址下拉框...")
+                            page.click("#wanMacSel")
+                            time.sleep(1)
+
+                            # 查找并点击"使用路由器的MAC"选项
+                            self.log("   🔍 查找'使用路由器的MAC'选项...")
+                            router_mac_selectors = [
+                                "#selOptsUlwanMacSel li:has-text('路由器')",
+                                "#selOptsUlwanMacSel li:has-text('默认')",
+                                "#selOptsUlwanMacSel li:has-text('使用路由器')",
+                            ]
+
+                            option_clicked = False
+                            for selector in router_mac_selectors:
+                                try:
+                                    router_mac_option = page.wait_for_selector(selector, timeout=1000)
+                                    if router_mac_option:
+                                        self.log("   ✅ 找到'使用路由器的MAC'选项，正在点击...")
+                                        router_mac_option.click()
+                                        option_clicked = True
+                                        time.sleep(1)
+                                        break
+                                except:
+                                    continue
+
+                            if option_clicked:
+                                # 点击保存按钮
+                                self.log("💾 正在保存MAC地址设置...")
+                                self.log("   按钮: #saveHighSet")
+                                save_btn_exists = page.query_selector("#saveHighSet")
+                                if save_btn_exists:
+                                    page.click("#saveHighSet")
+                                    self.log("✅ 已点击高级设置保存按钮")
+                                    time.sleep(3)
+                                    self.log("✅ MAC地址保存成功（路由器将使用默认MAC）")
+                                else:
+                                    self.log("⚠️ 未找到保存按钮")
+                            else:
+                                self.log("⚠️ 未找到'使用路由器的MAC'选项")
+                        else:
+                            self.log("⚠️ 未找到MAC地址下拉框")
+
+                    except Exception as e:
+                        self.log(f"⚠️ 设置MAC地址时出错: {e}")
+                        self.log("继续执行拨号流程...")
 
                 elif mac_mode == 'pc':
                     # 模式2：使用当前管理PC的MAC地址
@@ -1942,7 +1998,7 @@ def show_reconfig_dialog(parent_root):
     """
     dialog = tk.Toplevel(parent_root)
     dialog.title("路由器设置")
-    dialog.geometry("500x320")  # 简化后减小高度
+    dialog.geometry("500x500")  # 增加高度以确保按钮可见
     dialog.resizable(False, False)
     dialog.transient(parent_root)
     dialog.grab_set()
@@ -1996,8 +2052,14 @@ def show_reconfig_dialog(parent_root):
     )
     mac_mode_label.pack(anchor=tk.W, pady=(0, 5))
 
-    # MAC模式下拉框
-    mac_mode_var = tk.StringVar(value=current_config.get('mac_mode', 'router'))
+    # MAC模式下拉框 - 将配置值转换为显示文本
+    mac_mode_value = current_config.get('mac_mode', 'router')
+    mac_mode_text_mapping = {
+        'router': "使用路由器的MAC地址",
+        'pc': "使用当前管理PC的MAC地址",
+        'random': "使用随机MAC地址"
+    }
+    mac_mode_var = tk.StringVar(value=mac_mode_text_mapping.get(mac_mode_value, "使用路由器的MAC地址"))
     mac_mode_combobox = ttk.Combobox(
         advanced_container,
         textvariable=mac_mode_var,
@@ -2050,7 +2112,7 @@ def show_reconfig_dialog(parent_root):
         # 将下拉框选择的文本转换为配置值
         mac_mode_text = mac_mode_var.get()
         mac_mode_mapping = {
-            "使用路由器的MAC地址（推荐）": "router",
+            "使用路由器的MAC地址": "router",
             "使用当前管理PC的MAC地址": "pc",
             "使用随机MAC地址": "random"
         }
