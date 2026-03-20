@@ -1284,6 +1284,44 @@ class RouterLoginGUI:
                         self.log("   ⏳ 等待页面稳定（2秒）...")
                         time.sleep(2)
 
+                        # ===== 第1步：切换MAC地址模式为"自定义MAC" =====
+                        self.log("   🔍 查找WAN口MAC地址选择下拉框...")
+                        mac_sel_exists = page.query_selector("#wanMacSel")
+                        if mac_sel_exists:
+                            # 点击下拉框打开选项列表
+                            self.log("   📍 点击MAC地址下拉框...")
+                            page.click("#wanMacSel")
+                            time.sleep(1)
+
+                            # 查找并点击"使用自定义MAC地址"选项
+                            # 根据路由器页面，选项可能在下拉列表中
+                            self.log("   🔍 查找'自定义MAC'选项...")
+                            custom_mac_selectors = [
+                                "#selOptsUlwanMacSel li:has-text('自定义')",
+                                "#selOptsUlwanMacSel li[title*='自定义']",
+                                "#selOptsUlwanMacSel li:has-text('Custom')",
+                                "li.option:has-text('自定义MAC')",
+                            ]
+
+                            option_clicked = False
+                            for selector in custom_mac_selectors:
+                                try:
+                                    custom_mac_option = page.wait_for_selector(selector, timeout=1000)
+                                    if custom_mac_option:
+                                        self.log("   ✅ 找到'自定义MAC'选项，正在点击...")
+                                        custom_mac_option.click()
+                                        option_clicked = True
+                                        time.sleep(1)
+                                        break
+                                except:
+                                    continue
+
+                            if not option_clicked:
+                                self.log("   ⚠️ 未找到'自定义MAC'选项，可能已在自定义模式")
+                        else:
+                            self.log("   ⚠️ 未找到MAC地址下拉框，跳过模式切换")
+
+                        # ===== 第2步：生成并填写随机MAC地址 =====
                         # 生成随机MAC地址
                         import random
                         mac_bytes = [0x02, random.randint(0x00, 0xff), random.randint(0x00, 0xff),
@@ -1339,6 +1377,7 @@ class RouterLoginGUI:
                             self.log(f"⚠️ 验证MAC地址时出错: {e}")
                             filled_mac = None
 
+                        # ===== 第3步：保存MAC地址设置 =====
                         # 如果MAC填写成功，点击保存按钮
                         if filled_mac and filled_mac.upper().strip() == random_mac.upper().strip():
                             # 点击高级设置保存按钮
