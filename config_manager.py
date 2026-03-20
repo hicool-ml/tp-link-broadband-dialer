@@ -37,6 +37,7 @@ class ConfigManager:
         self.default_config = {
             'router_ip': '192.168.1.1',
             'router_password': '',
+            'mac_mode': 'router',  # 默认使用路由器MAC
             'version': '1.0'
         }
 
@@ -117,6 +118,12 @@ class ConfigManager:
                     return False, "IP地址格式不正确"
         except:
             return False, "IP地址格式不正确"
+
+        # 验证MAC模式（可选）
+        if 'mac_mode' in config:
+            valid_modes = ['router', 'pc', 'random']
+            if config['mac_mode'] not in valid_modes:
+                return False, f"MAC模式必须是以下之一: {', '.join(valid_modes)}"
 
         return True, ""
 
