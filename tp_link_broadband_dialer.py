@@ -959,55 +959,29 @@ class RouterLoginGUI:
                 # 访问上网设置页面
                 self.log("🚀 正在访问上网设置页面...")
 
-                # 尝试直接URL访问（使用正确的stok路径格式）
-                self.log("   方式1: 直接URL访问")
-                direct_urls = [
-                    ("PPPoE配置页面", f"http://{self.router_ip}/stok={stok}/pc/PPPoE.htm"),
-                    ("WAN配置页面", f"http://tplogin.cn/stok={stok}/pc/WanCfg.htm"),
-                ]
+                # 使用菜单导航（确保页面完整加载）
+                # 注意：直接URL访问虽然能找到输入框，但页面加载不完整，导致填写无效
+                self.log("   方式: 菜单导航（确保页面完整加载）")
+                self.log(f"   📍 返回主页: http://{self.router_ip}/")
+                page.goto(f"http://{self.router_ip}/")
+                time.sleep(2)
 
-                url_loaded = False
-                for i, (url_name, direct_url) in enumerate(direct_urls, 1):
-                    try:
-                        self.log(f"   📍 [{i}/{len(direct_urls)}] 尝试访问: {url_name}")
-                        self.log(f"      URL: {direct_url}")
-                        page.goto(direct_url, timeout=10000)
+                try:
+                    router_set_btn = page.wait_for_selector("#routerSetMbtn", timeout=3000)
+                    if router_set_btn:
+                        router_set_btn.click()
                         time.sleep(2)
+                except:
+                    pass
 
-                        # 检查是否成功（查找账号输入框）
-                        if page.query_selector("#name"):
-                            self.log(f"   ✅ 直接访问成功！使用: {url_name}")
-                            url_loaded = True
-                            break
-                        else:
-                            self.log(f"   ℹ️ 页面已加载，但未找到账号输入框")
-                    except Exception as e:
-                        self.log(f"   ⚠️ 访问失败: {e}")
-                        continue
+                try:
+                    network_menu = page.wait_for_selector("#network_rsMenu", timeout=3000)
+                    if network_menu:
+                        network_menu.click()
+                        time.sleep(2)
+                except:
+                    pass
 
-                # 如果直接URL失败，使用菜单导航
-                if not url_loaded:
-                    self.log("   方式2: 菜单导航")
-                    self.log(f"   📍 返回主页: http://{self.router_ip}/")
-                    page.goto(f"http://{self.router_ip}/")
-                    time.sleep(2)
-
-                    try:
-                        router_set_btn = page.wait_for_selector("#routerSetMbtn", timeout=3000)
-                        if router_set_btn:
-                            router_set_btn.click()
-                            time.sleep(2)
-                    except:
-                        pass
-
-                    try:
-                        network_menu = page.wait_for_selector("#network_rsMenu", timeout=3000)
-                        if network_menu:
-                            network_menu.click()
-                            time.sleep(2)
-                    except:
-                        pass
-                
                 # 断开连接
                 self.log("🔌 正在断开网络连接...")
                 self.log("   按钮: #disconnect")
@@ -1240,84 +1214,58 @@ class RouterLoginGUI:
                 # 访问上网设置页面
                 self.log("🚀 正在访问上网设置页面...")
 
-                # 尝试直接URL访问（使用正确的stok路径格式）
-                self.log("   方式1: 直接URL访问")
-                direct_urls = [
-                    ("PPPoE配置页面", f"http://{self.router_ip}/stok={stok}/pc/PPPoE.htm"),
-                    ("WAN配置页面", f"http://tplogin.cn/stok={stok}/pc/WanCfg.htm"),
+                # 使用菜单导航（确保页面完整加载）
+                # 注意：直接URL访问虽然能找到输入框，但页面加载不完整，导致填写无效
+                self.log("   方式: 菜单导航（确保页面完整加载）")
+                self.log(f"   📍 返回主页: http://{self.router_ip}/")
+                page.goto(f"http://{self.router_ip}/")
+                time.sleep(2)
+
+                try:
+                    router_set_btn = page.wait_for_selector("#routerSetMbtn", timeout=3000)
+                    if router_set_btn:
+                        router_set_btn.click()
+                        time.sleep(2)
+                except:
+                    pass
+
+                try:
+                    network_menu = page.wait_for_selector("#network_rsMenu", timeout=3000)
+                    if network_menu:
+                        network_menu.click()
+                        time.sleep(2)
+                except:
+                    pass
+
+                # 使用正确的选择器
+                internet_menu_selectors = [
+                    "#network_rsMenu",
+                    "li#network_rsMenu",
+                    "li.menuLi",
+                    "li:has-text('上网设置')",
                 ]
 
-                url_loaded = False
-                for i, (url_name, direct_url) in enumerate(direct_urls, 1):
+                menu_clicked = False
+                for selector in internet_menu_selectors:
                     try:
-                        self.log(f"   📍 [{i}/{len(direct_urls)}] 尝试访问: {url_name}")
-                        self.log(f"      URL: {direct_url}")
-                        page.goto(direct_url, timeout=10000)
-                        time.sleep(2)
-
-                        # 检查是否成功（查找账号输入框）
-                        if page.query_selector("#name"):
-                            self.log(f"   ✅ 直接访问成功！使用: {url_name}")
-                            url_loaded = True
+                        menu_item = page.wait_for_selector(selector, timeout=2000)
+                        if menu_item:
+                            menu_item.click()
+                            menu_clicked = True
+                            time.sleep(2)
                             break
-                        else:
-                            self.log(f"   ℹ️ 页面已加载，但未找到账号输入框")
-                    except Exception as e:
-                        self.log(f"   ⚠️ 访问失败: {e}")
+                    except:
                         continue
 
-                # 如果直接URL失败，使用菜单导航
-                if not url_loaded:
-                    self.log("   方式2: 菜单导航")
-                    self.log(f"   📍 返回主页: http://{self.router_ip}/")
-                    page.goto(f"http://{self.router_ip}/")
-                    time.sleep(2)
-
-                    try:
-                        router_set_btn = page.wait_for_selector("#routerSetMbtn", timeout=3000)
-                        if router_set_btn:
-                            router_set_btn.click()
-                            time.sleep(2)
-                    except:
-                        pass
-
-                    try:
-                        network_menu = page.wait_for_selector("#network_rsMenu", timeout=3000)
-                        if network_menu:
-                            network_menu.click()
-                            time.sleep(2)
-                    except:
-                        pass
-
-                    # 使用正确的选择器
-                    internet_menu_selectors = [
-                        "#network_rsMenu",
-                        "li#network_rsMenu",
-                        "li.menuLi",
-                        "li:has-text('上网设置')",
-                    ]
-
-                    menu_clicked = False
-                    for selector in internet_menu_selectors:
-                        try:
-                            menu_item = page.wait_for_selector(selector, timeout=2000)
-                            if menu_item:
-                                menu_item.click()
-                                menu_clicked = True
-                                time.sleep(2)
-                                break
-                        except:
-                            continue
-
-                    if not menu_clicked:
-                        self.log("❌ 无法打开上网设置")
-                        browser.close()
-                        self.update_button("connect", tk.NORMAL, "开始连接")
-                        self.update_status("配置失败")
-                        self.stop_progress()
-                        # 弹窗提示用户
-                        self.log_queue.put("[SHOW_ERROR]无法打开上网设置，请检查路由器是否正常工作")
-                        return
+                if not menu_clicked:
+                    self.log("❌ 无法打开上网设置")
+                    browser.close()
+                    self.update_button("connect", tk.NORMAL, "开始连接")
+                    self.update_status("配置失败")
+                    self.stop_progress()
+                    # 弹窗提示用户
+                    self.log_queue.put("[SHOW_ERROR]无法打开上网设置，请检查路由器是否正常工作")
+                    return
 
                 # ===== 设置随机WAN口MAC地址（已禁用） =====
                 # 注意：随机MAC地址可能导致拨号失败（运营商MAC绑定）
