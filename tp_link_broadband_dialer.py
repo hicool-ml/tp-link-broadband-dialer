@@ -1942,7 +1942,7 @@ def show_reconfig_dialog(parent_root):
     """
     dialog = tk.Toplevel(parent_root)
     dialog.title("路由器设置")
-    dialog.geometry("500x350")  # 恢复原始高度
+    dialog.geometry("500x320")  # 简化后减小高度
     dialog.resizable(False, False)
     dialog.transient(parent_root)
     dialog.grab_set()
@@ -1982,16 +1982,7 @@ def show_reconfig_dialog(parent_root):
 
     # 高级选项分隔线
     separator_frame = tk.Frame(dialog, height=2, bg="#CCCCCC")
-    separator_frame.pack(pady=15, padx=30, fill=tk.X)
-
-    # 高级选项标题
-    advanced_label = tk.Label(
-        dialog,
-        text="高级选项 - WAN口MAC地址设置",
-        font=("Microsoft YaHei", 11, "bold"),
-        fg="#666666"
-    )
-    advanced_label.pack(pady=(5, 10))
+    separator_frame.pack(pady=10, padx=30, fill=tk.X)
 
     # 高级选项容器
     advanced_container = tk.Frame(dialog)
@@ -2011,7 +2002,7 @@ def show_reconfig_dialog(parent_root):
         advanced_container,
         textvariable=mac_mode_var,
         values=[
-            "使用路由器的MAC地址（推荐）",
+            "使用路由器的MAC地址",
             "使用当前管理PC的MAC地址",
             "使用随机MAC地址"
         ],
@@ -2019,18 +2010,7 @@ def show_reconfig_dialog(parent_root):
         font=("Microsoft YaHei", 9),
         width=45
     )
-    mac_mode_combobox.pack(fill=tk.X, pady=(0, 5))
-
-    # MAC地址提示
-    mac_hint = tk.Label(
-        advanced_container,
-        text="💡 提示：使用PC MAC时，路由器会自动获取当前连接PC的网卡MAC地址。\n⚠️ 注意：某些运营商会绑定MAC地址，使用随机MAC可能导致拨号失败。",
-        font=("Microsoft YaHei", 8),
-        fg="#666666",
-        justify=tk.LEFT,
-        wraplength=440
-    )
-    mac_hint.pack(pady=(5, 0), anchor=tk.W)
+    mac_mode_combobox.pack(fill=tk.X, pady=(0, 10))
 
     # 错误提示
     error_label = tk.Label(
