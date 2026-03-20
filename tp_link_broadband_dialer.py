@@ -1875,7 +1875,7 @@ def show_reconfig_dialog(parent_root):
     """
     dialog = tk.Toplevel(parent_root)
     dialog.title("路由器设置")
-    dialog.geometry("450x300")
+    dialog.geometry("500x400")  # 增加高度以容纳高级选项
     dialog.resizable(False, False)
     dialog.transient(parent_root)
     dialog.grab_set()
@@ -1913,9 +1913,9 @@ def show_reconfig_dialog(parent_root):
     password_entry.insert(0, current_config.get('router_password', ''))
     password_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
 
-    # 高级选项分隔线
-    separator = ttk.Separator(dialog, orient='horizontal')
-    separator.pack(pady=15, padx=30, fill=tk.X)
+    # 高级选项分隔线（使用tk.Frame代替ttk.Separator）
+    separator_frame = tk.Frame(dialog, height=2, bg="#CCCCCC")
+    separator_frame.pack(pady=15, padx=30, fill=tk.X)
 
     # 高级选项标题
     advanced_label = tk.Label(
@@ -1926,9 +1926,13 @@ def show_reconfig_dialog(parent_root):
     )
     advanced_label.pack(pady=(5, 10))
 
+    # 高级选项容器
+    advanced_container = tk.Frame(dialog)
+    advanced_container.pack(pady=5, padx=30, fill=tk.X)
+
     # 随机MAC地址开关
-    mac_frame = tk.Frame(dialog)
-    mac_frame.pack(pady=8, padx=30, fill=tk.X)
+    mac_frame = tk.Frame(advanced_container)
+    mac_frame.pack(fill=tk.X, pady=5)
 
     random_mac_var = tk.BooleanVar(value=current_config.get('random_mac_enabled', False))
     mac_checkbutton = tk.Checkbutton(
@@ -1936,19 +1940,21 @@ def show_reconfig_dialog(parent_root):
         text="启用随机MAC地址（每次拨号前使用随机MAC，可能提高成功率）",
         variable=random_mac_var,
         font=("Microsoft YaHei", 9),
-        justify=tk.LEFT
+        justify=tk.LEFT,
+        anchor=tk.W
     )
-    mac_checkbutton.pack(anchor=tk.W)
+    mac_checkbutton.pack(fill=tk.X)
 
     # MAC地址提示
     mac_hint = tk.Label(
-        dialog,
+        advanced_container,
         text="⚠️ 注意：某些运营商会绑定MAC地址，启用随机MAC可能导致拨号失败",
         font=("Microsoft YaHei", 8),
         fg="#FF9800",
-        justify=tk.LEFT
+        justify=tk.LEFT,
+        wraplength=440  # 设置文字换行宽度
     )
-    mac_hint.pack(pady=(0, 5), padx=30, anchor=tk.W)
+    mac_hint.pack(pady=(5, 0), anchor=tk.W)
 
     # 错误提示
     error_label = tk.Label(
