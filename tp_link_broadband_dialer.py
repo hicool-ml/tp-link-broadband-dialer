@@ -1269,123 +1269,130 @@ class RouterLoginGUI:
                     self.log_queue.put("[SHOW_ERROR]无法打开上网设置，请检查路由器是否正常工作")
                     return
 
-                # ===== 设置随机WAN口MAC地址（已禁用） =====
-                # 注意：随机MAC地址可能导致拨号失败（运营商MAC绑定）
-                # 如需启用，请取消下方注释
-                self.log("⏭️ 跳过MAC地址设置（使用路由器默认MAC）")
-                self.log("💡 提示：如需随机MAC功能，可在设置中开启")
+                # ===== 设置随机WAN口MAC地址 =====
+                # 检查配置中是否启用了随机MAC功能
+                config_manager = ConfigManager()
+                config = config_manager.get_config()
+                random_mac_enabled = config.get('random_mac_enabled', False)
 
-                # try:
-                #     # 等待页面完全加载
-                #     self.log("   ⏳ 等待页面稳定（2秒）...")
-                #     time.sleep(2)
-                #
-                #     # 生成随机MAC地址
-                #     import random
-                #     mac_bytes = [0x02, random.randint(0x00, 0xff), random.randint(0x00, 0xff),
-                #                 random.randint(0x00, 0xff), random.randint(0x00, 0xff), random.randint(0x00, 0xff)]
-                #     # 使用横线分隔（与路由器原始格式一致）
-                #     random_mac = "-".join([f"{b:02X}" for b in mac_bytes])
-                #     self.log(f"📍 生成随机MAC: {random_mac}")
-                #     self.log(f"   选择器: #wanMac")
-                #
-                #     # 检查MAC地址输入框是否存在
-                #     self.log("🔍 查找MAC地址输入框 (#wanMac)...")
-                #     mac_input_exists = page.query_selector("#wanMac")
-                #     if not mac_input_exists:
-                #         self.log("⚠️ 未找到 #wanMac 输入框，跳过MAC设置")
-                #         raise Exception("MAC输入框不存在")
-                #
-                #     # 获取当前MAC值
-                #     try:
-                #         current_mac = page.input_value("#wanMac")
-                #         self.log(f"📋 当前MAC地址: {current_mac}")
-                #     except:
-                #         self.log("📋 当前MAC地址: (空)")
-                #         current_mac = ""
-                #
-                #     # 清空MAC输入框
-                #     self.log("🗑️ 清空MAC输入框...")
-                #     page.click("#wanMac")
-                #     time.sleep(0.3)
-                #     page.keyboard.press("Control+A")
-                #     time.sleep(0.2)
-                #     page.keyboard.press("Backspace")
-                #     time.sleep(0.3)
-                #
-                #     # 输入新的MAC地址（逐字符输入，更可靠）
-                #     self.log(f"⌨️ 输入新MAC地址: {random_mac}")
-                #     self.log(f"   输入方式: 逐字符输入 (delay=50ms)")
-                #     page.type("#wanMac", random_mac, delay=50)
-                #     time.sleep(0.5)
-                #
-                #     # 验证MAC地址是否填写成功
-                #     try:
-                #         filled_mac = page.input_value("#wanMac")
-                #         self.log(f"📋 填写后MAC: {filled_mac}")
-                #
-                #         # 统一转为大写比较
-                #         if filled_mac.upper().strip() == random_mac.upper().strip():
-                #             self.log("✅ MAC地址填写验证成功")
-                #         else:
-                #             self.log(f"⚠️ MAC地址验证失败")
-                #             self.log(f"   期望: {random_mac}")
-                #             self.log(f"   实际: {filled_mac}")
-                #     except Exception as e:
-                #         self.log(f"⚠️ 验证MAC地址时出错: {e}")
-                #         filled_mac = None
-                #
-                #     # 如果MAC填写成功，点击保存按钮
-                #     if filled_mac and filled_mac.upper().strip() == random_mac.upper().strip():
-                #         # 点击高级设置保存按钮
-                #         self.log("💾 正在保存MAC地址设置...")
-                #         self.log("   按钮: #saveHighSet")
-                #         save_btn_exists = page.query_selector("#saveHighSet")
-                #         if save_btn_exists:
-                #             page.click("#saveHighSet")
-                #             self.log("✅ 已点击高级设置保存按钮")
-                #
-                #             # 等待保存完成
-                #             self.log("⏳ 等待保存完成（5秒）...")
-                #             time.sleep(5)
-                #
-                #             # 检查是否有错误提示
-                #             try:
-                #                 error_alert = page.query_selector(".alert-content, .error, #msg")
-                #                 if error_alert and error_alert.is_visible():
-                #                     error_text = error_alert.inner_text()
-                #                     self.log(f"⚠️ 检测到错误提示: {error_text}")
-                #             except:
-                #                 pass
-                #
-                #             # 再次读取MAC地址验证是否保存成功
-                #             try:
-                #                 # 重新获取输入框元素（页面可能刷新）
-                #                 self.log("🔍 验证保存结果...")
-                #                 wan_mac_after = page.wait_for_selector("#wanMac", timeout=3000)
-                #                 if wan_mac_after:
-                #                     saved_mac = wan_mac_after.input_value()
-                #                     self.log(f"📋 保存后MAC: {saved_mac}")
-                #
-                #                     if saved_mac.upper().strip() == random_mac.upper().strip():
-                #                         self.log("✅ MAC地址保存成功且已验证")
-                #                     else:
-                #                         self.log(f"⚠️ MAC地址保存后未更新")
-                #                         self.log(f"   期望: {random_mac}")
-                #                         self.log(f"   实际: {saved_mac}")
-                #                         self.log("💡 提示: 某些路由器需要重启WAN口才能使MAC地址生效")
-                #                 else:
-                #                     self.log("⚠️ 保存后找不到MAC输入框")
-                #             except Exception as e:
-                #                 self.log(f"⚠️ 验证保存结果时出错: {e}")
-                #         else:
-                #             self.log("⚠️ 未找到 #saveHighSet 按钮")
-                #
-                # except Exception as e:
-                #     self.log(f"⚠️ 设置MAC地址时出错: {e}")
-                #     import traceback
-                #     self.log(f"详细错误: {traceback.format_exc()}")
-                #     self.log("继续执行拨号流程...")
+                if random_mac_enabled:
+                    self.log("🔧 随机MAC功能已启用")
+                    self.update_progress(50, "正在设置MAC地址......")
+
+                    try:
+                        # 等待页面完全加载
+                        self.log("   ⏳ 等待页面稳定（2秒）...")
+                        time.sleep(2)
+
+                        # 生成随机MAC地址
+                        import random
+                        mac_bytes = [0x02, random.randint(0x00, 0xff), random.randint(0x00, 0xff),
+                                    random.randint(0x00, 0xff), random.randint(0x00, 0xff), random.randint(0x00, 0xff)]
+                        # 使用横线分隔（与路由器原始格式一致）
+                        random_mac = "-".join([f"{b:02X}" for b in mac_bytes])
+                        self.log(f"📍 生成随机MAC: {random_mac}")
+                        self.log(f"   选择器: #wanMac")
+
+                        # 检查MAC地址输入框是否存在
+                        self.log("🔍 查找MAC地址输入框 (#wanMac)...")
+                        mac_input_exists = page.query_selector("#wanMac")
+                        if not mac_input_exists:
+                            self.log("⚠️ 未找到 #wanMac 输入框，跳过MAC设置")
+                            raise Exception("MAC输入框不存在")
+
+                        # 获取当前MAC值
+                        try:
+                            current_mac = page.input_value("#wanMac")
+                            self.log(f"📋 当前MAC地址: {current_mac}")
+                        except:
+                            self.log("📋 当前MAC地址: (空)")
+                            current_mac = ""
+
+                        # 清空MAC输入框
+                        self.log("🗑️ 清空MAC输入框...")
+                        page.click("#wanMac")
+                        time.sleep(0.3)
+                        page.keyboard.press("Control+A")
+                        time.sleep(0.2)
+                        page.keyboard.press("Backspace")
+                        time.sleep(0.3)
+
+                        # 输入新的MAC地址（逐字符输入，更可靠）
+                        self.log(f"⌨️ 输入新MAC地址: {random_mac}")
+                        self.log(f"   输入方式: 逐字符输入 (delay=50ms)")
+                        page.type("#wanMac", random_mac, delay=50)
+                        time.sleep(0.5)
+
+                        # 验证MAC地址是否填写成功
+                        try:
+                            filled_mac = page.input_value("#wanMac")
+                            self.log(f"📋 填写后MAC: {filled_mac}")
+
+                            # 统一转为大写比较
+                            if filled_mac.upper().strip() == random_mac.upper().strip():
+                                self.log("✅ MAC地址填写验证成功")
+                            else:
+                                self.log(f"⚠️ MAC地址验证失败")
+                                self.log(f"   期望: {random_mac}")
+                                self.log(f"   实际: {filled_mac}")
+                        except Exception as e:
+                            self.log(f"⚠️ 验证MAC地址时出错: {e}")
+                            filled_mac = None
+
+                        # 如果MAC填写成功，点击保存按钮
+                        if filled_mac and filled_mac.upper().strip() == random_mac.upper().strip():
+                            # 点击高级设置保存按钮
+                            self.log("💾 正在保存MAC地址设置...")
+                            self.log("   按钮: #saveHighSet")
+                            save_btn_exists = page.query_selector("#saveHighSet")
+                            if save_btn_exists:
+                                page.click("#saveHighSet")
+                                self.log("✅ 已点击高级设置保存按钮")
+
+                                # 等待保存完成
+                                self.log("⏳ 等待保存完成（5秒）...")
+                                time.sleep(5)
+
+                                # 检查是否有错误提示
+                                try:
+                                    error_alert = page.query_selector(".alert-content, .error, #msg")
+                                    if error_alert and error_alert.is_visible():
+                                        error_text = error_alert.inner_text()
+                                        self.log(f"⚠️ 检测到错误提示: {error_text}")
+                                except:
+                                    pass
+
+                                # 再次读取MAC地址验证是否保存成功
+                                try:
+                                    # 重新获取输入框元素（页面可能刷新）
+                                    self.log("🔍 验证保存结果...")
+                                    wan_mac_after = page.wait_for_selector("#wanMac", timeout=3000)
+                                    if wan_mac_after:
+                                        saved_mac = wan_mac_after.input_value()
+                                        self.log(f"📋 保存后MAC: {saved_mac}")
+
+                                        if saved_mac.upper().strip() == random_mac.upper().strip():
+                                            self.log("✅ MAC地址保存成功且已验证")
+                                        else:
+                                            self.log(f"⚠️ MAC地址保存后未更新")
+                                            self.log(f"   期望: {random_mac}")
+                                            self.log(f"   实际: {saved_mac}")
+                                            self.log("💡 提示: 某些路由器需要重启WAN口才能使MAC地址生效")
+                                    else:
+                                        self.log("⚠️ 保存后找不到MAC输入框")
+                                except Exception as e:
+                                    self.log(f"⚠️ 验证保存结果时出错: {e}")
+                            else:
+                                self.log("⚠️ 未找到 #saveHighSet 按钮")
+
+                    except Exception as e:
+                        self.log(f"⚠️ 设置MAC地址时出错: {e}")
+                        import traceback
+                        self.log(f"详细错误: {traceback.format_exc()}")
+                        self.log("继续执行拨号流程...")
+                else:
+                    self.log("⏭️ 跳过MAC地址设置（使用路由器默认MAC）")
+                    self.log("💡 提示：可在设置中启用随机MAC功能")
 
                 # ===== 填写账号密码 =====
                 self.log("📝 正在填写账号密码...")
@@ -1867,6 +1874,43 @@ def show_reconfig_dialog(parent_root):
     password_entry.insert(0, current_config.get('router_password', ''))
     password_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
 
+    # 高级选项分隔线
+    separator = ttk.Separator(dialog, orient='horizontal')
+    separator.pack(pady=15, padx=30, fill=tk.X)
+
+    # 高级选项标题
+    advanced_label = tk.Label(
+        dialog,
+        text="高级选项",
+        font=("Microsoft YaHei", 11, "bold"),
+        fg="#666666"
+    )
+    advanced_label.pack(pady=(5, 10))
+
+    # 随机MAC地址开关
+    mac_frame = tk.Frame(dialog)
+    mac_frame.pack(pady=8, padx=30, fill=tk.X)
+
+    random_mac_var = tk.BooleanVar(value=current_config.get('random_mac_enabled', False))
+    mac_checkbutton = tk.Checkbutton(
+        mac_frame,
+        text="启用随机MAC地址（每次拨号前使用随机MAC，可能提高成功率）",
+        variable=random_mac_var,
+        font=("Microsoft YaHei", 9),
+        justify=tk.LEFT
+    )
+    mac_checkbutton.pack(anchor=tk.W)
+
+    # MAC地址提示
+    mac_hint = tk.Label(
+        dialog,
+        text="⚠️ 注意：某些运营商会绑定MAC地址，启用随机MAC可能导致拨号失败",
+        font=("Microsoft YaHei", 8),
+        fg="#FF9800",
+        justify=tk.LEFT
+    )
+    mac_hint.pack(pady=(0, 5), padx=30, anchor=tk.W)
+
     # 错误提示
     error_label = tk.Label(
         dialog,
@@ -1906,6 +1950,7 @@ def show_reconfig_dialog(parent_root):
         config = {
             'router_ip': router_ip,
             'router_password': router_password,
+            'random_mac_enabled': random_mac_var.get(),
             'version': '1.0'
         }
 
