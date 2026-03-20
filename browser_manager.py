@@ -19,7 +19,7 @@ class BrowserManager:
         # 共享浏览器安装路径
         if getattr(sys, 'frozen', False):
             # 打包后的环境，安装在程序目录
-            self.install_dir = Path(sys.executable).parent.parent
+            self.install_dir = Path(sys.executable).parent
         else:
             # 开发环境，使用项目目录
             self.install_dir = Path(__file__).parent
@@ -31,18 +31,36 @@ class BrowserManager:
 
     def get_browser_path(self):
         """获取浏览器可执行文件路径"""
+        # 首先检查默认路径
         if self.chrome_exe.exists():
             return str(self.chrome_exe)
 
         # 尝试其他可能的路径
         possible_paths = [
+            self.install_dir / "chrome-win64" / "chrome.exe",
+            self.install_dir / "_internal" / "chrome-win64" / "chrome.exe",
             self.install_dir / "ms-playwright" / "chromium-1208" / "chrome-win64" / "chrome.exe",
             self.install_dir / "chromium-mini" / "chrome.exe",
         ]
 
+        # 如果是打包环境，尝试从sys._MEIPASS查找
+        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+            meipass_path = Path(sys._MEIPASS)
+            possible_paths.extend([
+                meipass_path / "chrome-win64" / "chrome.exe",
+                meipass_path / "_internal" / "chrome-win64" / "chrome.exe",
+            ])
+
         for path in possible_paths:
             if path.exists():
                 return str(path)
+
+        # 如果还是找不到，打印调试信息
+        print(f"DEBUG: install_dir={self.install_dir}")
+        print(f"DEBUG: chrome_exe={self.chrome_exe}")
+        print(f"DEBUG: chrome_exe exists={self.chrome_exe.exists()}")
+        if hasattr(sys, '_MEIPASS'):
+            print(f"DEBUG: _MEIPASS={sys._MEIPASS}")
 
         return None
 

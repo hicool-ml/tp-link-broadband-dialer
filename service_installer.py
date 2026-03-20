@@ -11,6 +11,7 @@ from tkinter import ttk, messagebox, scrolledtext
 import subprocess
 import threading
 import sys
+import os
 from pathlib import Path
 
 # 导入配置管理模块
@@ -26,8 +27,19 @@ class ServiceInstallerGUI:
         # 服务名称
         self.service_name = "TPLinkShutdownCleanup"
 
+        # 获取清理服务可执行文件路径
+        self.cleanup_service_exe = self._get_cleanup_service_path()
+
         self.create_widgets()
         self.update_service_status()
+
+    def _get_cleanup_service_path(self):
+        """获取清理服务可执行文件的路径"""
+        # 获取当前程序所在目录（打包后的exe所在目录）
+        current_dir = os.path.dirname(sys.executable)
+        # 清理服务可执行文件路径
+        cleanup_exe = os.path.join(current_dir, "CleanupService.exe")
+        return cleanup_exe
 
     def create_widgets(self):
         # 标题
@@ -239,7 +251,7 @@ class ServiceInstallerGUI:
 
         def install():
             returncode, stdout, stderr = self.run_command(
-                f'python shutdown_cleanup_service.py install'
+                f'"{self.cleanup_service_exe}" install'
             )
 
             self.root.after(0, lambda: self._install_complete(returncode, stdout, stderr))
@@ -271,7 +283,7 @@ class ServiceInstallerGUI:
 
         def remove():
             returncode, stdout, stderr = self.run_command(
-                f'python shutdown_cleanup_service.py remove'
+                f'"{self.cleanup_service_exe}" remove'
             )
 
             self.root.after(0, lambda: self._remove_complete(returncode, stdout, stderr))

@@ -38,13 +38,16 @@ def test_cleanup():
     print("正在初始化清理器...")
 
     try:
-        # 创建清理器实例
-        cleaner = RouterAccountCleaner(
-            router_ip="192.168.1.1",
-            router_password="Cdu@123"
-        )
+        # 添加site-packages路径
+        site_packages = r"C:\Program Files\Python311\Lib\site-packages"
+        if site_packages not in sys.path:
+            sys.path.insert(0, site_packages)
+
+        # 创建清理器实例（从配置文件读取）
+        cleaner = RouterAccountCleaner()
 
         print("清理器初始化完成")
+        print(f"路由器地址: {cleaner.router_ip}")
         print()
         print("开始清理测试...")
         print("=" * 60)

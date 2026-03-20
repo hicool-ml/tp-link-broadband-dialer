@@ -11,6 +11,20 @@ import subprocess
 import ctypes
 import atexit
 from pathlib import Path
+import io
+
+# ========== 修复Windows控制台编码问题 ==========
+# 在Windows系统上，设置控制台为UTF-8编码以支持emoji字符
+if sys.platform == 'win32':
+    try:
+        # 尝试设置控制台代码页为UTF-8
+        ctypes.windll.kernel32.SetConsoleOutputCP(65001)
+        # 重新配置stdout
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    except:
+        # 如果设置失败，使用安全的输出方式
+        pass
 
 # 导入配置管理模块
 from config_manager import ConfigManager
@@ -292,15 +306,17 @@ class RouterLoginGUI:
         )
         self.status_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-        # 设置按钮
+        # 设置按钮（更明显）
         settings_button = tk.Button(
             status_frame,
-            text="⚙ 设置",
+            text="⚙️ 设置",
             command=self.show_settings,
-            font=("Microsoft YaHei", 8),
-            width=6
+            font=("Microsoft YaHei", 9, "bold"),
+            width=8,
+            bg="#f0f0f0",
+            relief=tk.RAISED
         )
-        settings_button.pack(side=tk.RIGHT, padx=1, pady=1)
+        settings_button.pack(side=tk.RIGHT, padx=2, pady=2)
         
     def toggle_debug_window(self):
         """切换调试窗口显示/隐藏"""
@@ -364,7 +380,14 @@ class RouterLoginGUI:
 
     def show_settings(self):
         """显示设置对话框"""
-        show_reconfig_dialog(self.root)
+        result = show_reconfig_dialog(self.root)
+        if result:
+            # 如果配置已更新，重新加载配置
+            config_manager = ConfigManager()
+            config = config_manager.get_config()
+            self.router_ip = config.get('router_ip', '')
+            self.router_password = config.get('router_password', '')
+            self.log("✅ 路由器配置已更新")
     
     def process_log_queue(self):
         """处理日志队列（在主线程中执行）"""
@@ -896,14 +919,18 @@ class RouterLoginGUI:
                 page.route("**/*", capture_stok)
 
                 self.log("🔌 正在访问路由器管理页面...")
+                self.log(f"   目标: http://{self.router_ip}/")
                 page.goto(f"http://{self.router_ip}/")
 
                 # ===== 登录 =====
+                self.log("🔑 等待登录密码输入框...")
                 page.wait_for_selector("input[type='password']", timeout=10000)
+                self.log("   找到密码输入框，正在填写...")
                 page.fill("input[type='password']", self.router_password)
+                self.log("   已填写密码，正在提交登录...")
                 page.keyboard.press("Enter")
 
-                self.log("正在验证登录...")
+                self.log("⏳ 正在验证登录，等待token响应...")
                 
                 # 等待捕获到 stok
                 for i in range(15):
@@ -927,38 +954,74 @@ class RouterLoginGUI:
                 self.log("✅ 登录成功")
 
                 # 更新进度：登录成功
-                self.update_progress(30, "正在断开连接......")
+                self.update_progress(40, "正在访问上网设置......")
 
-                # 等待页面加载
-                time.sleep(3)
-                
-                # 导航到上网设置
-                self.log("正在进入路由设置...")
-                try:
-                    router_set_btn = page.wait_for_selector("#routerSetMbtn", timeout=5000)
-                    if router_set_btn:
-                        router_set_btn.click()
+                # 访问上网设置页面
+                self.log("🚀 正在访问上网设置页面...")
+
+                # 尝试直接URL访问（使用正确的stok路径格式）
+                self.log("   方式1: 直接URL访问")
+                direct_urls = [
+                    ("PPPoE配置页面", f"http://{self.router_ip}/stok={stok}/pc/PPPoE.htm"),
+                    ("WAN配置页面", f"http://tplogin.cn/stok={stok}/pc/WanCfg.htm"),
+                ]
+
+                url_loaded = False
+                for i, (url_name, direct_url) in enumerate(direct_urls, 1):
+                    try:
+                        self.log(f"   📍 [{i}/{len(direct_urls)}] 尝试访问: {url_name}")
+                        self.log(f"      URL: {direct_url}")
+                        page.goto(direct_url, timeout=10000)
                         time.sleep(2)
-                except:
-                    pass
-                
-                try:
-                    network_menu = page.wait_for_selector("#network_rsMenu", timeout=5000)
-                    if network_menu:
-                        network_menu.click()
-                        time.sleep(2)
-                except:
-                    pass
+
+                        # 检查是否成功（查找账号输入框）
+                        if page.query_selector("#name"):
+                            self.log(f"   ✅ 直接访问成功！使用: {url_name}")
+                            url_loaded = True
+                            break
+                        else:
+                            self.log(f"   ℹ️ 页面已加载，但未找到账号输入框")
+                    except Exception as e:
+                        self.log(f"   ⚠️ 访问失败: {e}")
+                        continue
+
+                # 如果直接URL失败，使用菜单导航
+                if not url_loaded:
+                    self.log("   方式2: 菜单导航")
+                    self.log(f"   📍 返回主页: http://{self.router_ip}/")
+                    page.goto(f"http://{self.router_ip}/")
+                    time.sleep(2)
+
+                    try:
+                        router_set_btn = page.wait_for_selector("#routerSetMbtn", timeout=3000)
+                        if router_set_btn:
+                            router_set_btn.click()
+                            time.sleep(2)
+                    except:
+                        pass
+
+                    try:
+                        network_menu = page.wait_for_selector("#network_rsMenu", timeout=3000)
+                        if network_menu:
+                            network_menu.click()
+                            time.sleep(2)
+                    except:
+                        pass
                 
                 # 断开连接
-                self.log("正在断开网络连接...")
+                self.log("🔌 正在断开网络连接...")
+                self.log("   按钮: #disconnect")
                 try:
                     disconnect_btn = page.wait_for_selector("#disconnect", timeout=5000)
                     if disconnect_btn:
+                        self.log("   ✅ 找到断开按钮，正在点击...")
                         disconnect_btn.click()
+                        self.log("   ✅ 已点击断开按钮")
                         time.sleep(2)
-                except:
-                    self.log("⚠️ 未找到断开按钮")
+                    else:
+                        self.log("   ⚠️ 断开按钮不存在（可能已经断开）")
+                except Exception as e:
+                    self.log(f"   ⚠️ 查找/点击断开按钮失败: {e}")
 
                 # 更新进度：断开完成，正在清除
                 self.update_progress(60, "正在清除账号密码......")
@@ -967,25 +1030,29 @@ class RouterLoginGUI:
                 self.log("🗑️ 正在清除账号密码...")
                 try:
                     # 清空账号
-                    self.log("📝 正在清空账号输入框...")
+                    self.log("   📝 清空账号输入框 (#name)...")
                     name_input = page.wait_for_selector("#name", timeout=5000)
                     if name_input:
                         name_input.fill("")
-                        self.log("✅ 账号输入框已清空")
+                        self.log("   ✅ 账号输入框已清空")
+                    else:
+                        self.log("   ⚠️ 未找到账号输入框")
 
                     # 清空密码
-                    self.log("📝 正在清空密码输入框...")
+                    self.log("   📝 清空密码输入框 (#psw)...")
                     psw_input = page.wait_for_selector("#psw", timeout=5000)
                     if psw_input:
                         psw_input.fill("")
-                        self.log("✅ 密码输入框已清空")
+                        self.log("   ✅ 密码输入框已清空")
+                    else:
+                        self.log("   ⚠️ 未找到密码输入框")
 
                     # 验证账号密码是否真的被清除了
-                    self.log("🔍 正在验证账号密码是否已清除...")
+                    self.log("   🔍 正在验证账号密码是否已清除...")
                     time.sleep(1)
-                    name_value = name_input.input_value()
-                    psw_value = psw_input.input_value()
-                    self.log(f"📋 验证结果：账号=[{name_value}], 密码=[{psw_value}]")
+                    name_value = name_input.input_value() if name_input else ""
+                    psw_value = psw_input.input_value() if psw_input else ""
+                    self.log(f"   📋 验证结果：账号=[{name_value}], 密码=[{psw_value}]")
 
                     if not name_value and not psw_value:
                         self.log("✅ 账号密码已清除")
@@ -995,21 +1062,28 @@ class RouterLoginGUI:
                         disconnect_success = False
                 except Exception as e:
                     self.log(f"⚠️ 清除账号密码时出错: {e}")
+                    import traceback
+                    self.log(f"详细错误: {traceback.format_exc()}")
                     disconnect_success = False
 
                 # 更新进度：清除完成，正在保存
                 self.update_progress(90, "正在保存配置......")
 
                 # 保存（保存空账号密码）
-                self.log("正在保存配置...")
+                self.log("💾 正在保存配置（空账号密码）...")
+                self.log("   按钮: #save")
                 try:
                     save_btn = page.wait_for_selector("#save", timeout=5000)
                     if save_btn:
+                        self.log("   ✅ 找到保存按钮，正在点击...")
                         save_btn.click()
+                        self.log("   ✅ 已点击保存按钮")
                         time.sleep(2)
-                except:
-                    self.log("⚠️ 保存配置时出错")
-                
+                    else:
+                        self.log("   ⚠️ 未找到保存按钮")
+                except Exception as e:
+                    self.log(f"   ⚠️ 保存配置时出错: {e}")
+
                 self.log("=" * 50)
                 if disconnect_success:
                     self.log("✅ 断开并清除完成")
@@ -1124,15 +1198,19 @@ class RouterLoginGUI:
                 page.route("**/*", capture_stok)
 
                 self.log("🔌 正在访问路由器管理页面...")
+                self.log(f"   目标: http://{self.router_ip}/")
                 self.update_status("正在登录路由器...")
                 page.goto(f"http://{self.router_ip}/")
 
                 # ===== 登录 =====
+                self.log("🔑 等待登录密码输入框...")
                 page.wait_for_selector("input[type='password']", timeout=10000)
+                self.log("   找到密码输入框，正在填写...")
                 page.fill("input[type='password']", self.router_password)
+                self.log("   已填写密码，正在提交登录...")
                 page.keyboard.press("Enter")
 
-                self.log("正在验证登录...")
+                self.log("⏳ 正在验证登录，等待token响应...")
                 
                 # 等待捕获到 stok
                 for i in range(15):
@@ -1157,23 +1235,59 @@ class RouterLoginGUI:
                 self.log("✅ 登录成功")
 
                 # 更新进度：登录成功
-                self.update_progress(30, "正在配置路由器......")
+                self.update_progress(40, "正在访问上网设置......")
 
-                # 等待登录后的页面完全加载
-                time.sleep(3)
-                
-                # ===== 按照正确的流程操作 =====
-                self.log("正在进入路由设置...")
-                self.update_status("正在配置路由器...")
-                try:
-                    router_set_btn = page.wait_for_selector("#routerSetMbtn", timeout=5000)
-                    if router_set_btn:
-                        router_set_btn.click()
+                # 访问上网设置页面
+                self.log("🚀 正在访问上网设置页面...")
+
+                # 尝试直接URL访问（使用正确的stok路径格式）
+                self.log("   方式1: 直接URL访问")
+                direct_urls = [
+                    ("PPPoE配置页面", f"http://{self.router_ip}/stok={stok}/pc/PPPoE.htm"),
+                    ("WAN配置页面", f"http://tplogin.cn/stok={stok}/pc/WanCfg.htm"),
+                ]
+
+                url_loaded = False
+                for i, (url_name, direct_url) in enumerate(direct_urls, 1):
+                    try:
+                        self.log(f"   📍 [{i}/{len(direct_urls)}] 尝试访问: {url_name}")
+                        self.log(f"      URL: {direct_url}")
+                        page.goto(direct_url, timeout=10000)
                         time.sleep(2)
-                except:
-                    pass
-                
-                self.log("正在打开上网设置...")
+
+                        # 检查是否成功（查找账号输入框）
+                        if page.query_selector("#name"):
+                            self.log(f"   ✅ 直接访问成功！使用: {url_name}")
+                            url_loaded = True
+                            break
+                        else:
+                            self.log(f"   ℹ️ 页面已加载，但未找到账号输入框")
+                    except Exception as e:
+                        self.log(f"   ⚠️ 访问失败: {e}")
+                        continue
+
+                # 如果直接URL失败，使用菜单导航
+                if not url_loaded:
+                    self.log("   方式2: 菜单导航")
+                    self.log(f"   📍 返回主页: http://{self.router_ip}/")
+                    page.goto(f"http://{self.router_ip}/")
+                    time.sleep(2)
+
+                    try:
+                        router_set_btn = page.wait_for_selector("#routerSetMbtn", timeout=3000)
+                        if router_set_btn:
+                            router_set_btn.click()
+                            time.sleep(2)
+                    except:
+                        pass
+
+                    try:
+                        network_menu = page.wait_for_selector("#network_rsMenu", timeout=3000)
+                        if network_menu:
+                            network_menu.click()
+                            time.sleep(2)
+                    except:
+                        pass
                 
                 # 使用正确的选择器
                 internet_menu_selectors = [
@@ -1194,7 +1308,7 @@ class RouterLoginGUI:
                             break
                     except:
                         continue
-                
+
                 if not menu_clicked:
                     self.log("❌ 无法打开上网设置")
                     browser.close()
@@ -1204,57 +1318,138 @@ class RouterLoginGUI:
                     # 弹窗提示用户
                     self.log_queue.put("[SHOW_ERROR]无法打开上网设置，请检查路由器是否正常工作")
                     return
-                
-                self.log("正在配置拨号方式...")
-                try:
-                    # 先检查当前选中的值
-                    wan_sel = page.wait_for_selector("#wanSel .value", timeout=5000)
-                    if wan_sel:
-                        current_value = wan_sel.inner_text()
-                        
-                        if "宽带拨号上网" in current_value or "PPPoE" in current_value:
-                            self.log("✅ 当前已是宽带拨号模式")
-                        else:
-                            # 点击下拉框打开选项列表
-                            wan_sel_box = page.wait_for_selector("#wanSel", timeout=5000)
-                            wan_sel_box.click()
-                            time.sleep(1)
-                            
-                            # 点击"宽带拨号上网"选项
-                            pppoe_option_selectors = [
-                                "#selOptsUlwanSel li:has-text('宽带拨号上网')",
-                                "#selOptsUlwanSel li[title='宽带拨号上网']",
-                                "li.option:has-text('宽带拨号上网')",
-                            ]
-                            
-                            option_clicked = False
-                            for selector in pppoe_option_selectors:
-                                try:
-                                    pppoe_option = page.wait_for_selector(selector, timeout=1000)
-                                    if pppoe_option:
-                                        pppoe_option.click()
-                                        option_clicked = True
-                                        time.sleep(1)
-                                        break
-                                except:
-                                    continue
-                            
-                            if not option_clicked:
-                                self.log("⚠️ 无法切换到宽带拨号模式")
-                except Exception as e:
-                    self.log(f"⚠️ 配置拨号方式时出错: {e}")
 
-                # 更新进度：配置完成，准备输入账号密码
-                self.update_progress(50, "正在输入账号密码......")
+                # ===== 设置随机WAN口MAC地址 =====
+                self.log("🔧 正在设置随机WAN口MAC地址...")
+                self.update_progress(50, "正在设置MAC地址......")
+
+                try:
+                    # 等待页面完全加载
+                    self.log("   ⏳ 等待页面稳定（2秒）...")
+                    time.sleep(2)
+
+                    # 生成随机MAC地址
+                    import random
+                    mac_bytes = [0x02, random.randint(0x00, 0xff), random.randint(0x00, 0xff),
+                                random.randint(0x00, 0xff), random.randint(0x00, 0xff), random.randint(0x00, 0xff)]
+                    # 使用横线分隔（与路由器原始格式一致）
+                    random_mac = "-".join([f"{b:02X}" for b in mac_bytes])
+                    self.log(f"📍 生成随机MAC: {random_mac}")
+                    self.log(f"   选择器: #wanMac")
+
+                    # 检查MAC地址输入框是否存在
+                    self.log("🔍 查找MAC地址输入框 (#wanMac)...")
+                    mac_input_exists = page.query_selector("#wanMac")
+                    if not mac_input_exists:
+                        self.log("⚠️ 未找到 #wanMac 输入框，跳过MAC设置")
+                        raise Exception("MAC输入框不存在")
+
+                    # 获取当前MAC值
+                    try:
+                        current_mac = page.input_value("#wanMac")
+                        self.log(f"📋 当前MAC地址: {current_mac}")
+                    except:
+                        self.log("📋 当前MAC地址: (空)")
+                        current_mac = ""
+
+                    # 清空MAC输入框
+                    self.log("🗑️ 清空MAC输入框...")
+                    page.click("#wanMac")
+                    time.sleep(0.3)
+                    page.keyboard.press("Control+A")
+                    time.sleep(0.2)
+                    page.keyboard.press("Backspace")
+                    time.sleep(0.3)
+
+                    # 输入新的MAC地址（逐字符输入，更可靠）
+                    self.log(f"⌨️ 输入新MAC地址: {random_mac}")
+                    self.log(f"   输入方式: 逐字符输入 (delay=50ms)")
+                    page.type("#wanMac", random_mac, delay=50)
+                    time.sleep(0.5)
+
+                    # 验证MAC地址是否填写成功
+                    try:
+                        filled_mac = page.input_value("#wanMac")
+                        self.log(f"📋 填写后MAC: {filled_mac}")
+
+                        # 统一转为大写比较
+                        if filled_mac.upper().strip() == random_mac.upper().strip():
+                            self.log("✅ MAC地址填写验证成功")
+                        else:
+                            self.log(f"⚠️ MAC地址验证失败")
+                            self.log(f"   期望: {random_mac}")
+                            self.log(f"   实际: {filled_mac}")
+                    except Exception as e:
+                        self.log(f"⚠️ 验证MAC地址时出错: {e}")
+                        filled_mac = None
+
+                    # 如果MAC填写成功，点击保存按钮
+                    if filled_mac and filled_mac.upper().strip() == random_mac.upper().strip():
+                        # 点击高级设置保存按钮
+                        self.log("💾 正在保存MAC地址设置...")
+                        self.log("   按钮: #saveHighSet")
+                        save_btn_exists = page.query_selector("#saveHighSet")
+                        if save_btn_exists:
+                            page.click("#saveHighSet")
+                            self.log("✅ 已点击高级设置保存按钮")
+
+                            # 等待保存完成
+                            self.log("⏳ 等待保存完成（5秒）...")
+                            time.sleep(5)
+
+                            # 检查是否有错误提示
+                            try:
+                                error_alert = page.query_selector(".alert-content, .error, #msg")
+                                if error_alert and error_alert.is_visible():
+                                    error_text = error_alert.inner_text()
+                                    self.log(f"⚠️ 检测到错误提示: {error_text}")
+                            except:
+                                pass
+
+                            # 再次读取MAC地址验证是否保存成功
+                            try:
+                                # 重新获取输入框元素（页面可能刷新）
+                                self.log("🔍 验证保存结果...")
+                                wan_mac_after = page.wait_for_selector("#wanMac", timeout=3000)
+                                if wan_mac_after:
+                                    saved_mac = wan_mac_after.input_value()
+                                    self.log(f"📋 保存后MAC: {saved_mac}")
+
+                                    if saved_mac.upper().strip() == random_mac.upper().strip():
+                                        self.log("✅ MAC地址保存成功且已验证")
+                                    else:
+                                        self.log(f"⚠️ MAC地址保存后未更新")
+                                        self.log(f"   期望: {random_mac}")
+                                        self.log(f"   实际: {saved_mac}")
+                                        self.log("💡 提示: 某些路由器需要重启WAN口才能使MAC地址生效")
+                                else:
+                                    self.log("⚠️ 保存后找不到MAC输入框")
+                            except Exception as e:
+                                self.log(f"⚠️ 验证保存结果时出错: {e}")
+                        else:
+                            self.log("⚠️ 未找到 #saveHighSet 按钮")
+
+                except Exception as e:
+                    self.log(f"⚠️ 设置MAC地址时出错: {e}")
+                    import traceback
+                    self.log(f"详细错误: {traceback.format_exc()}")
+                    self.log("继续执行拨号流程...")
 
                 # ===== 填写账号密码 =====
-                self.log("正在输入账号密码...")
+                self.log("📝 正在填写账号密码...")
+                self.log(f"   账号: {broadband_user}")
+                self.log(f"   密码: {'*' * len(broadband_pass)}")
                 self.update_status("正在输入账号密码...")
 
                 # 等待输入框出现
                 try:
+                    self.log("   🔍 等待账号输入框 (#name)...")
                     page.wait_for_selector("#name", timeout=10000)
+                    self.log("   ✅ 找到账号输入框")
+
+                    self.log("   🔍 等待密码输入框 (#psw)...")
                     page.wait_for_selector("#psw", timeout=5000)
+                    self.log("   ✅ 找到密码输入框")
                 except:
                     self.log("❌ 无法找到账号密码输入框")
                     browser.close()
@@ -1269,14 +1464,19 @@ class RouterLoginGUI:
                 self.update_progress(70, "正在拨号连接......")
 
                 # 清空并填写账号
+                self.log("   ⌨️ 填写账号...")
                 page.fill("#name", "")
                 page.fill("#name", broadband_user)
+                self.log("   ✅ 账号已填写")
 
                 # 清空并填写密码
+                self.log("   ⌨️ 填写密码...")
                 page.fill("#psw", "")
                 page.fill("#psw", broadband_pass)
+                self.log("   ✅ 密码已填写")
 
                 # 触发 blur 事件（重要）
+                self.log("   触发输入框失焦事件...")
                 page.locator("#psw").blur()
 
                 time.sleep(1)
@@ -1296,20 +1496,24 @@ class RouterLoginGUI:
                     # 点击连接按钮
                     self.update_status(f"正在拨号（第{attempt}次）...")
                     self.log("🔘 正在点击保存/连接按钮...")
+                    self.log("   按钮: #save")
                     try:
                         page.click("#save")
-                        self.log("✅ 已点击保存按钮")
+                        self.log("   ✅ 已点击保存按钮 (#save)")
                     except Exception as e:
-                        self.log(f"⚠️ 点击#save失败: {e}")
+                        self.log(f"   ⚠️ 点击#save失败: {e}")
+                        self.log("   🔄 尝试备用按钮...")
                         try:
                             page.click("button:has-text('保存'), button:has-text('连接'), .save-btn")
-                            self.log("✅ 已点击备用按钮")
+                            self.log("   ✅ 已点击备用按钮")
                         except Exception as e2:
-                            self.log(f"⚠️ 点击备用按钮也失败: {e2}")
+                            self.log(f"   ⚠️ 点击备用按钮也失败: {e2}")
+                            self.log("   🔄 最后尝试点击#save...")
                             page.click("#save")
-                            self.log("✅ 再次尝试点击#save")
+                            self.log("   ✅ 再次尝试点击#save")
 
                     self.log("⏳ 正在等待拨号完成（10秒）...")
+                    self.log("   等待IP地址分配和连接建立...")
                     time.sleep(10)
 
                     # ===== 检查连接状态 =====
@@ -1317,15 +1521,17 @@ class RouterLoginGUI:
                     self.log("🔍 正在检查连接状态...")
                     try:
                         # 等待IP地址更新
+                        self.log("   ⏳ 等待IP地址更新（3秒）...")
                         time.sleep(3)
 
                         # 获取IP地址
                         self.log("📡 正在获取WAN IP地址...")
+                        self.log("   选择器: #wanIpLbl")
                         ip_element = page.wait_for_selector("#wanIpLbl", timeout=5000)
                         if ip_element:
                             ip_address = ip_element.inner_text()
                             self.log(f"📋 获取到IP地址: {ip_address}")
-                            
+
                             if ip_address and ip_address != "0.0.0.0" and ip_address != "0.0.0.0 ":
                                 self.log("=" * 50)
                                 self.log("✅ 拨号成功！")
@@ -1664,13 +1870,20 @@ def show_config_wizard():
 
 
 def show_reconfig_dialog(parent_root):
-    """显示重新配置对话框"""
+    """显示重新配置对话框
+
+    Returns:
+        bool: 配置是否成功保存
+    """
     dialog = tk.Toplevel(parent_root)
     dialog.title("路由器设置")
     dialog.geometry("450x300")
     dialog.resizable(False, False)
     dialog.transient(parent_root)
     dialog.grab_set()
+
+    # 结果存储
+    result = {'saved': False}
 
     # 标题
     title_label = tk.Label(
@@ -1745,7 +1958,8 @@ def show_reconfig_dialog(parent_root):
         }
 
         if config_manager.save_config(config):
-            messagebox.showinfo("成功", "路由器配置已保存！\n\n请重启程序使配置生效。")
+            result['saved'] = True
+            messagebox.showinfo("成功", "路由器配置已保存！\n\n新配置已立即生效。")
             dialog.destroy()
         else:
             error_label.config(text="保存配置失败，请重试")
@@ -1767,10 +1981,14 @@ def show_reconfig_dialog(parent_root):
     tk.Button(
         button_frame,
         text="取消",
-        command=dialog.destroy,
+        command=lambda: dialog.destroy(),
         font=("Microsoft YaHei", 10),
         width=12
     ).pack(side=tk.LEFT, padx=5)
+
+    # 等待对话框关闭
+    dialog.wait_window()
+    return result['saved']
 
 
 def main():

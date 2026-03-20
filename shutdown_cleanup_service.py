@@ -4,23 +4,20 @@
 TP-Link路由器账号清理服务
 
 作为Windows后台服务运行，在系统关机时自动断开路由器拨号并清除账号密码。
-
-特性：
-- 作为Windows服务运行，关机优先级高
-- 接受SERVICE_CONTROL_SHUTDOWN控制码
-- 关机超时时间最长可达3分钟
-- 自动启动，无需用户登录
-- 无GUI，纯后台服务
-- 独立于主程序运行
 """
 
-import os
 import sys
+import os
 import time
 import logging
-import threading
-import subprocess
+import re
 from pathlib import Path
+
+# 添加site-packages路径
+site_packages = r"C:\Program Files\Python311\Lib\site-packages"
+if site_packages not in sys.path:
+    sys.path.insert(0, site_packages)
+
 import win32service
 import win32serviceutil
 import win32event
@@ -29,16 +26,15 @@ import servicemanager
 
 # 导入Playwright
 from playwright.sync_api import sync_playwright
-import re
 
-# 导入配置管理模块
+# 尝试导入项目模块
+current_dir = Path(__file__).parent
+sys.path.insert(0, str(current_dir))
+
 from config_manager import ConfigManager
-
-# 导入浏览器管理模块
 from browser_manager import BrowserManager
 
 
-# ========== 核心：强制程序只使用内置资源 ==========
 def get_resource_path(relative_path):
     """获取PyInstaller打包后的内置资源路径"""
     if hasattr(sys, '_MEIPASS'):
@@ -54,15 +50,15 @@ os.environ["PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD"] = "1"
 # 创建浏览器管理器
 browser_manager = BrowserManager()
 
+
 def check_browser():
     """验证浏览器是否存在并返回路径"""
-    # 尝试使用共享浏览器
-    browser_path = browser_manager.get_browser_path()
-
-    if browser_path:
-        return browser_path
-
-    # 如果找不到浏览器，抛出异常
+    try:
+        browser_path = browser_manager.get_browser_path()
+        if browser_path:
+            return browser_path
+    except Exception:
+        pass
     raise RuntimeError("浏览器未安装！请运行程序安装向导安装浏览器。")
 
 
@@ -74,184 +70,31 @@ class RouterAccountCleaner:
         config_manager = ConfigManager()
         config = config_manager.get_config()
 
-        # 获取路由器配置（如果配置无效则使用默认值）
+        # 获取路由器配置
         self.router_ip = config.get('router_ip', '')
         self.router_password = config.get('router_password', '')
 
-        # 如果没有配置 IP，使用默认值（但会记录警告）
+        # 如果没有配置 IP，使用默认值
         if not self.router_ip:
             self.router_ip = '192.168.1.1'
-            self.logger.warning("未配置路由器IP，使用默认值: 192.168.1.1")
 
         self.logger = logging.getLogger(__name__)
-
-        # 记录配置信息
         self.logger.info(f"路由器地址: {self.router_ip}")
 
         if not self.router_password:
             self.logger.warning("路由器管理密码未配置，清理功能可能无法工作")
 
-    def check_router_status(self):
-        """检查路由器状态
-
-        返回: (is_connected, has_account)
-            is_connected: 是否已连接（有IP地址）
-            has_account: 是否配置了账号
-        """
-        try:
-            captured_stok = []
-
-            def capture_stok(route, request):
-                url = request.url
-                if "stok=" in url:
-                    match = re.search(r"stok=([^/&?#]+)", url)
-                    if match and not captured_stok:
-                        stok_value = match.group(1)
-                        captured_stok.append(stok_value)
-                route.continue_()
-
-            with sync_playwright() as p:
-                self.logger.info("正在检查路由器状态...")
-
-                executable_path = None
-                try:
-                    executable_path = check_browser()
-                except RuntimeError:
-                    pass
-
-                launch_options = {
-                    'headless': True,
-                    'slow_mo': 200,
-                    'args': [
-                        "--no-sandbox",
-                        "--disable-gpu",
-                        "--disable-dev-shm-usage",
-                        "--disable-extensions",
-                        "--disable-plugins",
-                        "--lang=zh-CN",
-                    ],
-                    'handle_sigint': False,
-                }
-
-                if executable_path:
-                    launch_options['executable_path'] = executable_path
-
-                browser = p.chromium.launch(**launch_options)
-                context = browser.new_context()
-                page = context.new_page()
-                page.route("**/*", capture_stok)
-
-                # 快速访问路由器
-                page.goto(f"http://{self.router_ip}/", timeout=15000)
-
-                try:
-                    page.wait_for_selector("input[type='password']", timeout=5000)
-                    page.fill("input[type='password']", self.router_password)
-                    page.keyboard.press("Enter")
-
-                    # 等待登录
-                    for _ in range(10):
-                        time.sleep(0.5)
-                        if captured_stok:
-                            break
-
-                    if not captured_stok:
-                        browser.close()
-                        return False, True  # 无法确定状态，假设需要清理
-
-                    page.unroute("**/*", capture_stok)
-                    time.sleep(2)
-
-                    # 导航到网络设置
-                    try:
-                        router_set_btn = page.wait_for_selector("#routerSetMbtn", timeout=3000)
-                        if router_set_btn:
-                            router_set_btn.click()
-                            time.sleep(1.5)
-                    except:
-                        pass
-
-                    try:
-                        network_menu = page.wait_for_selector("#network_rsMenu", timeout=3000)
-                        if network_menu:
-                            network_menu.click()
-                            time.sleep(1.5)
-                    except:
-                        pass
-
-                    # 检查连接状态（获取WAN IP）
-                    is_connected = False
-                    try:
-                        ip_element = page.wait_for_selector("#wanIpLbl", timeout=3000)
-                        if ip_element:
-                            ip_address = ip_element.inner_text()
-                            if ip_address and ip_address != "0.0.0.0" and ip_address.strip():
-                                is_connected = True
-                                self.logger.info(f"路由器状态: 已连接 (IP: {ip_address})")
-                            else:
-                                self.logger.info("路由器状态: 未连接")
-                    except:
-                        self.logger.info("路由器状态: 无法确定连接状态")
-
-                    # 检查账号配置
-                    has_account = False
-                    try:
-                        name_input = page.wait_for_selector("#name", timeout=3000)
-                        if name_input:
-                            account_value = name_input.input_value()
-                            has_account = bool(account_value and account_value.strip())
-                            if has_account:
-                                self.logger.info(f"账号状态: 已配置 (账号={account_value})")
-                            else:
-                                self.logger.info("账号状态: 未配置")
-                    except:
-                        self.logger.info("账号状态: 无法确定")
-
-                    browser.close()
-                    return is_connected, has_account
-
-                except Exception as e:
-                    self.logger.warning(f"检查路由器状态时出错: {e}")
-                    browser.close()
-                    return False, True  # 无法确定状态，假设需要清理
-
-        except Exception as e:
-            self.logger.warning(f"状态检查失败: {e}")
-            return False, True  # 无法确定状态，假设需要清理
-
     def clear_account(self):
-        """清除路由器中的账号密码
+        """清除路由器账号密码
 
-        智能清理流程：
-        1. 先检查路由器状态
-        2. 如果已断开且账号为空，直接返回成功
-        3. 否则执行完整的清理流程
+        返回: bool - 是否成功清除
         """
         try:
             self.logger.info("=" * 60)
-            self.logger.info("开始路由器清理流程...")
+            self.logger.info("开始执行清理流程")
             self.logger.info("=" * 60)
 
-            # 第一步：检查路由器状态
-            self.logger.info("[步骤 1/3] 检查路由器状态...")
-            is_connected, has_account = self.check_router_status()
-
-            # 第二步：判断是否需要清理
-            self.logger.info("[步骤 2/3] 评估清理需求...")
-            if not is_connected and not has_account:
-                self.logger.info("路由器已断开且账号为空，无需清理")
-                self.logger.info("=" * 60)
-                self.logger.info("清理流程完成（无需操作）")
-                self.logger.info("=" * 60)
-                return True
-
-            if is_connected:
-                self.logger.info("检测到路由器已连接，需要断开连接")
-            if has_account:
-                self.logger.info("检测到路由器已配置账号，需要清除账号")
-
-            # 第三步：执行清理
-            self.logger.info("[步骤 3/3] 执行清理操作...")
+            # 执行清理
             return self._perform_cleanup()
 
         except Exception as e:
@@ -435,6 +278,7 @@ class ShutdownCleanupService(win32serviceutil.ServiceFramework):
         self.hWaitStop = win32event.CreateEvent(None, 0, 0, None)
         self.is_alive = True
         self.cleaner = None
+        self.logger = None
 
         # 设置更长的关机超时
         self.ReportServiceStatus(win32service.SERVICE_START_PENDING)
@@ -446,21 +290,38 @@ class ShutdownCleanupService(win32serviceutil.ServiceFramework):
 
     def setup_logging(self):
         """设置日志"""
-        log_dir = Path(os.environ.get('TEMP', '/tmp')) / 'tplink_cleanup'
-        log_dir.mkdir(parents=True, exist_ok=True)
+        log_dir = Path(r"C:\Program Files\TPLinkDialer\logs")
+        try:
+            log_dir.mkdir(parents=True, exist_ok=True)
+        except:
+            log_dir = Path(os.environ.get('TEMP', '/tmp')) / 'tplink_cleanup'
+            log_dir.mkdir(parents=True, exist_ok=True)
+
         log_file = log_dir / 'cleanup_service.log'
 
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(levelname)s - %(message)s',
-            handlers=[
-                logging.FileHandler(log_file, encoding='utf-8'),
-                logging.StreamHandler()
-            ]
-        )
+        try:
+            logging.basicConfig(
+                level=logging.INFO,
+                format='%(asctime)s - %(levelname)s - %(message)s',
+                handlers=[
+                    logging.FileHandler(log_file, encoding='utf-8', mode='a'),
+                ],
+                force=True
+            )
+        except:
+            logging.basicConfig(
+                level=logging.INFO,
+                format='%(asctime)s - %(levelname)s - %(message)s',
+                handlers=[
+                    logging.StreamHandler(),
+                ],
+                force=True
+            )
+
         self.logger = logging.getLogger(__name__)
         self.logger.info("=" * 60)
         self.logger.info("TP-Link路由器账号清理服务启动")
+        self.logger.info(f"日志文件: {log_file}")
         self.logger.info("=" * 60)
 
     def validate_config(self):
@@ -481,14 +342,20 @@ class ShutdownCleanupService(win32serviceutil.ServiceFramework):
 
     def SvcStop(self):
         """停止服务"""
-        self.logger.info("收到停止服务请求...")
+        if self.logger:
+            self.logger.info("收到停止服务请求...")
         self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
         self.is_alive = False
         win32event.SetEvent(self.hWaitStop)
-        self.logger.info("服务已停止")
+        if self.logger:
+            self.logger.info("服务已停止")
+        self.ReportServiceStatus(win32service.SERVICE_STOPPED)
 
     def SvcShutdown(self):
         """关机时的处理"""
+        if not self.logger:
+            self.setup_logging()
+
         self.logger.info("=" * 60)
         self.logger.info("收到系统关机通知！")
         self.logger.info("=" * 60)
@@ -526,9 +393,10 @@ class ShutdownCleanupService(win32serviceutil.ServiceFramework):
 
     def SvcDoRun(self):
         """服务主循环"""
-        self.logger.info("服务开始运行...")
-
         try:
+            self.setup_logging()
+            self.logger.info("服务开始运行...")
+
             # 初始化清理器（提前验证配置）
             self.logger.info("正在初始化清理器...")
             try:
@@ -543,194 +411,23 @@ class ShutdownCleanupService(win32serviceutil.ServiceFramework):
             self.logger.info("服务已就绪，等待关机事件...")
 
             # 主循环：等待关机或停止事件
+            count = 0
             while self.is_alive:
-                result = win32event.WaitForSingleObject(
-                    self.hWaitStop,
-                    1000  # 每秒检查一次
-                )
+                result = win32event.WaitForSingleObject(self.hWaitStop, 5000)
 
                 if result == win32event.WAIT_OBJECT_0:
                     break
 
+                count += 1
                 # 定期记录心跳（每分钟）
-                # 可以用于监控服务是否正常运行
+                if count % 12 == 0:
+                    self.logger.info(f"服务运行中... ({count // 12}分钟)")
 
         except Exception as e:
-            self.logger.error(f"服务运行时出错: {e}", exc_info=True)
+            if self.logger:
+                self.logger.error(f"服务运行时出错: {e}", exc_info=True)
             self.ReportServiceStatus(win32service.SERVICE_STOPPED)
 
 
-def install_service():
-    """安装服务"""
-    try:
-        print("正在安装TP-Link路由器账号清理服务...")
-
-        # 检查是否已安装
-        try:
-            win32serviceutil.QueryServiceStatus(ShutdownCleanupService._svc_name_)
-            print("服务已安装，正在卸载旧版本...")
-            win32serviceutil.RemoveService(ShutdownCleanupService._svc_name_)
-            time.sleep(2)
-        except:
-            pass
-
-        # 安装服务（自动启动）
-        win32serviceutil.InstallService(
-            ShutdownCleanupService._svc_name_,
-            ShutdownCleanupService._svc_display_name_,
-            startType=win32service.SERVICE_AUTO_START,
-            description=ShutdownCleanupService._svc_description_
-        )
-
-        # 配置服务：接受关机控制码 + 设置更长的关机超时
-        import win32service
-        hscm = win32service.OpenSCManager(None, None, win32service.SC_MANAGER_ALL_ACCESS)
-        hs = win32service.OpenService(hscm, ShutdownCleanupService._svc_name_, win32service.SERVICE_ALL_ACCESS)
-
-        # 设置服务配置
-        # SERVICE_ACCEPT_SHUTDOWN: 接受关机控制码
-        win32service.ChangeServiceConfig2(hs, win32service.SERVICE_CONFIG_DESCRIPTION, ShutdownCleanupService._svc_description_)
-
-        # 设置关机超时时间（3分钟）
-        try:
-            # 尝试设置关机超时（需要管理员权限）
-            import pywintypes
-            info = win32service.QueryServiceConfig(hs)
-            # 确保服务接受关机控制
-            win32service.ChangeServiceConfig(
-                hs,
-                win32service.SERVICE_AUTO_START,
-                win32service.SERVICE_ERROR_IGNORE,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                ShutdownCleanupService._svc_display_name_
-            )
-        except Exception as e:
-            print(f"配置服务时出现警告（可忽略）: {e}")
-
-        win32service.CloseService(hs)
-        win32service.CloseServiceManager(hscm)
-
-        print("服务安装成功！")
-        print(f"\n服务名称: {ShutdownCleanupService._svc_name_}")
-        print(f"显示名称: {ShutdownCleanupService._svc_display_name_}")
-        print("启动类型: 自动")
-        print("功能: 关机时自动清除路由器账号密码")
-        print("\n管理命令:")
-        print(f"  启动服务: net start {ShutdownCleanupService._svc_name_}")
-        print(f"  停止服务: net stop {ShutdownCleanupService._svc_name_}")
-        print(f"  查看状态: sc query {ShutdownCleanupService._svc_name_}")
-        print(f"  卸载服务: python {os.path.basename(__file__)} remove")
-        print(f"\n日志位置: %TEMP%\\tplink_cleanup\\cleanup_service.log")
-
-        # 询问是否立即启动
-        try:
-            response = input("\n是否立即启动服务？(y/n): ").lower()
-            if response == 'y':
-                win32serviceutil.StartService(ShutdownCleanupService._svc_name_)
-                print("服务已启动")
-        except:
-            pass
-
-    except Exception as e:
-        print(f"服务安装失败: {e}")
-        import traceback
-        traceback.print_exc()
-
-
-def remove_service():
-    """卸载服务"""
-    try:
-        print("正在卸载TP-Link路由器账号清理服务...")
-
-        try:
-            win32serviceutil.StopService(ShutdownCleanupService._svc_name_)
-            print("服务已停止")
-        except:
-            print("（服务未运行）")
-
-        win32serviceutil.RemoveService(ShutdownCleanupService._svc_name_)
-        print("服务已卸载")
-
-    except Exception as e:
-        print(f"服务卸载失败: {e}")
-        import traceback
-        traceback.print_exc()
-
-
-def start_service():
-    """启动服务"""
-    try:
-        print("正在启动服务...")
-        win32serviceutil.StartService(ShutdownCleanupService._svc_name_)
-        print("服务已启动")
-    except Exception as e:
-        print(f"服务启动失败: {e}")
-
-
-def stop_service():
-    """停止服务"""
-    try:
-        print("正在停止服务...")
-        win32serviceutil.StopService(ShutdownCleanupService._svc_name_)
-        print("服务已停止")
-    except Exception as e:
-        print(f"服务停止失败: {e}")
-
-
-def show_status():
-    """显示服务状态"""
-    try:
-        status = win32serviceutil.QueryServiceStatus(ShutdownCleanupService._svc_name_)
-
-        state_map = {
-            win32service.SERVICE_STOPPED: "已停止",
-            win32service.SERVICE_START_PENDING: "正在启动",
-            win32service.SERVICE_STOP_PENDING: "正在停止",
-            win32service.SERVICE_RUNNING: "正在运行",
-            win32service.SERVICE_CONTINUE_PENDING: "正在继续",
-            win32service.SERVICE_PAUSE_PENDING: "正在暂停",
-            win32service.SERVICE_PAUSED: "已暂停",
-        }
-
-        state = state_map.get(status[1], "未知状态")
-        print(f"服务状态: {state}")
-
-    except Exception as e:
-        print(f"无法查询服务状态: {e}")
-
-
 if __name__ == '__main__':
-    if len(sys.argv) > 1:
-        command = sys.argv[1].lower()
-
-        if command == 'install':
-            install_service()
-        elif command in ('remove', 'uninstall'):
-            remove_service()
-        elif command == 'start':
-            start_service()
-        elif command == 'stop':
-            stop_service()
-        elif command == 'status':
-            show_status()
-        elif command == 'restart':
-            stop_service()
-            time.sleep(2)
-            start_service()
-        else:
-            print("TP-Link路由器账号清理服务管理工具")
-            print("\n用法:")
-            print(f"  python {os.path.basename(__file__)} install   - 安装服务")
-            print(f"  python {os.path.basename(__file__)} remove    - 卸载服务")
-            print(f"  python {os.path.basename(__file__)} start     - 启动服务")
-            print(f"  python {os.path.basename(__file__)} stop      - 停止服务")
-            print(f"  python {os.path.basename(__file__)} restart   - 重启服务")
-            print(f"  python {os.path.basename(__file__)} status    - 查看状态")
-    else:
-        win32serviceutil.HandleCommandLine(ShutdownCleanupService)
+    win32serviceutil.HandleCommandLine(ShutdownCleanupService)
