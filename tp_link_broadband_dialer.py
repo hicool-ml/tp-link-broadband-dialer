@@ -203,6 +203,22 @@ class RouterLoginGUI:
                 self.log("提示: 系统托盘功能不可用，窗口保持可见")
     
     def create_widgets(self):
+        # 隐藏的设置入口（双击标题上方的空白区域）
+        secret_settings_frame = tk.Frame(self.root, height=20)
+        secret_settings_frame.pack(pady=(0, 0))
+        secret_settings_frame.pack_propagate(False)  # 防止frame被内容压缩
+
+        # 添加一个几乎透明的Label作为触发区域
+        secret_trigger = tk.Label(
+            secret_settings_frame,
+            text="",  # 空文本，看起来是空白
+            cursor="arrow",  # 鼠标样式保持默认
+            bg=self.root.cget("bg")  # 背景色与窗口背景一致
+        )
+        secret_trigger.pack(fill=tk.BOTH, expand=True)
+        # 绑定双击事件
+        secret_trigger.bind("<Double-Button-1>", lambda e: self.show_settings())
+
         # 标题
         title_label = tk.Label(
             self.root,
