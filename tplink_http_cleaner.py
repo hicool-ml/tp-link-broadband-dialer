@@ -11,7 +11,9 @@ import time
 import re
 import logging
 import base64
+import json
 from typing import Optional, Dict, Any
+from urllib.parse import unquote
 
 
 def parse_config_password(config_password: str) -> str:
@@ -150,11 +152,17 @@ class TPLinkHTTPCleaner:
                 if result.get("error_code") == 0:
                     # stok 可能在根级别或 data 字段中
                     if "stok" in result:
-                        self.stok = result["stok"]
+                        raw_stok = result["stok"]
+                        self.stok = unquote(raw_stok)  # URL 解码
+                        self._log(f"[DEBUG] 原始 stok: {raw_stok}")
+                        self._log(f"[DEBUG] 解码 stok: {self.stok}")
                         self._log(f"[SUCCESS] 登录成功 (stok: {self.stok[:20]}...)")
                         return True
                     elif "data" in result and "stok" in result["data"]:
-                        self.stok = result["data"]["stok"]
+                        raw_stok = result["data"]["stok"]
+                        self.stok = unquote(raw_stok)  # URL 解码
+                        self._log(f"[DEBUG] 原始 stok: {raw_stok}")
+                        self._log(f"[DEBUG] 解码 stok: {self.stok}")
                         self._log(f"[SUCCESS] 登录成功 (stok: {self.stok[:20]}...)")
                         return True
                     else:
@@ -192,23 +200,44 @@ class TPLinkHTTPCleaner:
 
         try:
             url = f"{self.base_url}/stok={self.stok}/ds"
+            self._log(f"[DEBUG] 断开 URL: {url}")
 
             # TP-Link 常见的断开连接接口
             data = {
                 "network": {
-                    "wan": {
-                        "disconnect": 1
+                    "change_wan_status": {
+                        "proto": "pppoe",
+                        "operate": "disconnect"
                     }
                 },
                 "method": "do"
             }
+            self._log(f"[DEBUG] 断开请求数据: {json.dumps(data, ensure_ascii=False)}")
 
-            response = self.session.post(url, json=data, timeout=10)
+            headers = {
+                "Content-Type": "application/json",
+                "Referer": f"{self.base_url}/",
+                "Origin": self.base_url
+            }
+
+            response = self.session.post(url, json=data, headers=headers, timeout=10)
+            self._log(f"[DEBUG] 断开响应状态: {response.status_code}")
+            self._log(f"[DEBUG] 断开响应内容: {response.text}")
 
             if response.status_code == 200:
-                self._log("✅ PPPoE 已断开")
-                time.sleep(1)
-                return True
+                try:
+                    result = response.json()
+                    if result.get("error_code") == 0:
+                        self._log("✅ PPPoE 已断开")
+                        time.sleep(1)
+                        return True
+                    else:
+                        self._log(f"⚠️ 断开失败: 错误码 {result.get('error_code')}")
+                        return False
+                except:
+                    self._log("✅ PPPoE 已断开（无响应内容）")
+                    time.sleep(1)
+                    return True
             else:
                 self._log(f"⚠️ 断开失败 (HTTP {response.status_code})")
                 return False
@@ -232,25 +261,47 @@ class TPLinkHTTPCleaner:
 
         try:
             url = f"{self.base_url}/stok={self.stok}/ds"
+            self._log(f"[DEBUG] 清空 URL: {url}")
 
-            # 清空账号密码
+            # 正确的清空格式（从浏览器捕获）
             data = {
-                "network": {
+                "protocol": {
                     "wan": {
+                        "wan_type": "pppoe"
+                    },
+                    "pppoe": {
                         "username": "",
-                        "password": "",
-                        "method": "_pppoe"
+                        "password": ""
                     }
                 },
                 "method": "set"
             }
+            self._log(f"[DEBUG] 清空请求数据: {json.dumps(data, ensure_ascii=False)}")
 
-            response = self.session.post(url, json=data, timeout=10)
+            headers = {
+                "Content-Type": "application/json",
+                "Referer": f"{self.base_url}/",
+                "Origin": self.base_url
+            }
+
+            response = self.session.post(url, json=data, headers=headers, timeout=10)
+            self._log(f"[DEBUG] 清空响应状态: {response.status_code}")
+            self._log(f"[DEBUG] 清空响应内容: {response.text}")
 
             if response.status_code == 200:
-                self._log("✅ 账号密码已清空")
-                time.sleep(1)
-                return True
+                try:
+                    result = response.json()
+                    if result.get("error_code") == 0:
+                        self._log("✅ 账号密码已清空")
+                        time.sleep(1)
+                        return True
+                    else:
+                        self._log(f"⚠️ 清空失败: 错误码 {result.get('error_code')}")
+                        return False
+                except:
+                    self._log("✅ 账号密码已清空（无响应内容）")
+                    time.sleep(1)
+                    return True
             else:
                 self._log(f"⚠️ 清空失败 (HTTP {response.status_code})")
                 return False
