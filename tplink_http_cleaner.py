@@ -347,6 +347,274 @@ class TPLinkHTTPCleaner:
             self._log(f"❌ 保存异常: {e}")
             return False
 
+    def set_mac_address(self, mac_mode: str, custom_mac: str = None) -> bool:
+        """
+        设置MAC地址
+
+        Args:
+            mac_mode: MAC模式 ('router', 'pc', 'random')
+            custom_mac: 自定义MAC地址（仅当mac_mode='random'时使用）
+
+        Returns:
+            bool: 是否成功
+        """
+        self._log(f"🔧 正在设置MAC地址 (模式: {mac_mode})...")
+
+        if not self.stok:
+            self._log("❌ 未登录，无法设置MAC")
+            return False
+
+        try:
+            url = f"{self.base_url}/stok={self.stok}/ds"
+
+            # 根据模式准备MAC地址
+            if mac_mode == 'router':
+                # 使用路由器默认MAC（不需要设置）
+                self._log("   使用路由器默认MAC")
+                return True
+            elif mac_mode == 'pc':
+                # 使用PC的MAC（需要获取，这里暂时跳过）
+                self._log("   ⚠️ PC模式暂不支持")
+                return False
+            elif mac_mode == 'random':
+                if not custom_mac:
+                    # 生成随机MAC
+                    import random
+                    mac_bytes = [0x02, random.randint(0x00, 0xff), random.randint(0x00, 0xff),
+                                random.randint(0x00, 0xff), random.randint(0x00, 0xff), random.randint(0x00, 0xff)]
+                    custom_mac = "-".join([f"{b:02X}" for b in mac_bytes])
+
+                self._log(f"   使用随机MAC: {custom_mac}")
+
+                # 设置MAC地址的完整配置
+                data = {
+                    "protocol": {
+                        "wan": {
+                            "macaddr": custom_mac,
+                            "wan_rate": "auto"
+                        },
+                        "pppoe": {
+                            "dial_mode": "auto",
+                            "conn_mode": "auto",
+                            "mtu": "1480",
+                            "access": "",
+                            "server": "",
+                            "ip_mode": "dynamic",
+                            "dns_mode": "dynamic",
+                            "proto": "none"
+                        }
+                    },
+                    "method": "set"
+                }
+            else:
+                self._log(f"   ⚠️ 未知的MAC模式: {mac_mode}")
+                return False
+
+            if mac_mode == 'random':
+                self._log(f"[DEBUG] MAC设置请求: {json.dumps(data, ensure_ascii=False)}")
+
+                headers = {
+                    "Content-Type": "application/json",
+                    "Referer": f"{self.base_url}/",
+                    "Origin": self.base_url
+                }
+
+                response = self.session.post(url, json=data, headers=headers, timeout=10)
+                self._log(f"[DEBUG] MAC设置响应: {response.text}")
+
+                if response.status_code == 200:
+                    try:
+                        result = response.json()
+                        if result.get("error_code") == 0:
+                            self._log("✅ MAC地址设置成功")
+                            time.sleep(2)
+                            return True
+                        else:
+                            self._log(f"⚠️ MAC设置失败: 错误码 {result.get('error_code')}")
+                            return False
+                    except:
+                        self._log("✅ MAC地址设置成功（无响应内容）")
+                        time.sleep(2)
+                        return True
+                else:
+                    self._log(f"⚠️ MAC设置失败 (HTTP {response.status_code})")
+                    return False
+
+            return True
+
+        except Exception as e:
+            self._log(f"❌ 设置MAC异常: {e}")
+            return False
+
+    def set_pppoe_account(self, username: str, password: str) -> bool:
+        """
+        设置PPPoE账号密码
+
+        Args:
+            username: PPPoE账号
+            password: PPPoE密码
+
+        Returns:
+            bool: 是否成功
+        """
+        self._log("📝 正在设置PPPoE账号...")
+        self._log(f"   账号: {username}")
+        self._log(f"   密码: {'*' * len(password)}")
+
+        if not self.stok:
+            self._log("❌ 未登录，无法设置账号")
+            return False
+
+        try:
+            url = f"{self.base_url}/stok={self.stok}/ds"
+
+            # 设置PPPoE账号密码
+            data = {
+                "protocol": {
+                    "wan": {
+                        "wan_type": "pppoe"
+                    },
+                    "pppoe": {
+                        "username": username,
+                        "password": password
+                    }
+                },
+                "method": "set"
+            }
+
+            self._log(f"[DEBUG] PPPoE设置请求: {json.dumps(data, ensure_ascii=False)}")
+
+            headers = {
+                "Content-Type": "application/json",
+                "Referer": f"{self.base_url}/",
+                "Origin": self.base_url
+            }
+
+            response = self.session.post(url, json=data, headers=headers, timeout=10)
+            self._log(f"[DEBUG] PPPoE设置响应: {response.text}")
+
+            if response.status_code == 200:
+                try:
+                    result = response.json()
+                    if result.get("error_code") == 0:
+                        self._log("✅ PPPoE账号密码设置成功")
+                        time.sleep(1)
+                        return True
+                    else:
+                        self._log(f"⚠️ PPPoE设置失败: 错误码 {result.get('error_code')}")
+                        return False
+                except:
+                    self._log("✅ PPPoE账号密码设置成功（无响应内容）")
+                    time.sleep(1)
+                    return True
+            else:
+                self._log(f"⚠️ PPPoE设置失败 (HTTP {response.status_code})")
+                return False
+
+        except Exception as e:
+            self._log(f"❌ 设置PPPoE异常: {e}")
+            return False
+
+    def connect_pppoe(self) -> bool:
+        """
+        连接PPPoE
+
+        Returns:
+            bool: 是否成功
+        """
+        self._log("🔗 正在连接PPPoE...")
+
+        if not self.stok:
+            self._log("❌ 未登录，无法连接")
+            return False
+
+        try:
+            url = f"{self.base_url}/stok={self.stok}/ds"
+
+            # 连接PPPoE
+            data = {
+                "network": {
+                    "change_wan_status": {
+                        "proto": "pppoe",
+                        "operate": "connect"
+                    }
+                },
+                "method": "do"
+            }
+
+            self._log(f"[DEBUG] 连接请求: {json.dumps(data, ensure_ascii=False)}")
+
+            headers = {
+                "Content-Type": "application/json",
+                "Referer": f"{self.base_url}/",
+                "Origin": self.base_url
+            }
+
+            response = self.session.post(url, json=data, headers=headers, timeout=10)
+            self._log(f"[DEBUG] 连接响应: {response.text}")
+
+            if response.status_code == 200:
+                try:
+                    result = response.json()
+                    if result.get("error_code") == 0:
+                        self._log("✅ PPPoE连接请求已发送")
+                        time.sleep(1)
+                        return True
+                    else:
+                        self._log(f"⚠️ 连接失败: 错误码 {result.get('error_code')}")
+                        return False
+                except:
+                    self._log("✅ PPPoE连接请求已发送（无响应内容）")
+                    time.sleep(1)
+                    return True
+            else:
+                self._log(f"⚠️ 连接失败 (HTTP {response.status_code})")
+                return False
+
+        except Exception as e:
+            self._log(f"❌ 连接异常: {e}")
+            return False
+
+    def get_wan_status(self) -> dict:
+        """
+        获取WAN状态
+
+        Returns:
+            dict: WAN状态信息
+        """
+        if not self.stok:
+            return {}
+
+        try:
+            url = f"{self.base_url}/stok={self.stok}/ds"
+
+            data = {
+                "network": {
+                    "name": ["wan_status"]
+                },
+                "method": "get"
+            }
+
+            response = self.session.post(url, json=data, timeout=10)
+
+            if response.status_code == 200:
+                result = response.json()
+                if result.get("error_code") == 0:
+                    return result.get("data", result)
+        except:
+            pass
+
+        return {}
+                time.sleep(1)
+                return True
+            else:
+                self._log(f"⚠️ 保存失败 (HTTP {response.status_code})")
+                return False
+
+        except Exception as e:
+            self._log(f"❌ 保存异常: {e}")
+            return False
+
     def run_cleanup(self) -> bool:
         """
         执行完整的清理流程

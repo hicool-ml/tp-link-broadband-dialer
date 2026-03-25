@@ -14,6 +14,7 @@ import os
 import subprocess
 import ctypes
 import atexit
+import time
 from pathlib import Path
 import io
 
@@ -280,9 +281,169 @@ class RouterLoginGUI:
         return disconnect_success
 
     def reconnect(self):
-        """重新连接（功能待实现）"""
-        self.log("[WARNING] 重新连接功能尚未实现")
-        messagebox.showinfo("提示", "重新连接功能将在后续版本中实现")
+        """重新连接"""
+        # 弹出对话框获取宽带账号密码
+        dialog = tk.Toplevel(self.root)
+        dialog.title("宽带账号")
+        dialog.geometry("400x250")
+        dialog.resizable(False, False)
+
+        # 居中显示
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        # 账号输入
+        ttk.Label(dialog, text="宽带账号:").pack(pady=(20, 5))
+        account_entry = ttk.Entry(dialog, width=40)
+        account_entry.pack(pady=5)
+        if self.saved_account:
+            account_entry.insert(0, self.saved_account)
+
+        # 密码输入
+        ttk.Label(dialog, text="宽带密码:").pack(pady=(10, 5))
+        password_entry = ttk.Entry(dialog, width=40, show="*")
+        password_entry.pack(pady=5)
+        if self.saved_password:
+            password_entry.insert(0, self.saved_password)
+
+        # 结果变量
+        result = {'confirmed': False, 'account': '', 'password': ''}
+
+        def on_confirm():
+            result['account'] = account_entry.get().strip()
+            result['password'] = password_entry.get().strip()
+            result['confirmed'] = True
+            dialog.destroy()
+
+        def on_cancel():
+            dialog.destroy()
+
+        # 按钮
+        button_frame = ttk.Frame(dialog)
+        button_frame.pack(pady=20)
+        ttk.Button(button_frame, text="连接", command=on_confirm, width=10).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="取消", command=on_cancel, width=10).pack(side=tk.LEFT, padx=5)
+
+        # 等待对话框关闭
+        self.root.wait_window(dialog)
+
+        if result['confirmed'] and result['account'] and result['password']:
+            # 保存账号密码
+            self.saved_account = result['account']
+            self.saved_password = result['password']
+
+            # 禁用按钮
+            self.update_button("disconnect", tk.DISABLED)
+            self.update_button("connect", tk.DISABLED, "正在连接...")
+
+            # 在新线程中执行连接
+            thread = threading.Thread(target=self.run_connection, args=(result['account'], result['password']))
+            thread.daemon = True
+            thread.start()
+        else:
+            self.log("[INFO] 连接已取消")
+
+    def run_connection(self, broadband_user, broadband_pass):
+        """执行连接逻辑"""
+        connection_success = False
+        try:
+            self.log("=" * 60)
+            self.log("开始执行路由器连接流程...")
+            self.log(f"账号: {broadband_user}")
+            self.log(f"密码: {'*' * len(broadband_pass)}")
+            self.log("=" * 60)
+
+            # 更新进度：初始化
+            self.update_progress(10, "正在连接路由器...")
+            self.update_status("正在连接...")
+
+            # 创建 HTTP 清理器
+            self.cleaner = TPLinkHTTPCleaner(self.router_ip, self.router_password)
+
+            # 替换日志方法
+            self.cleaner._log = lambda msg: self.log(msg)
+
+            # 1. 登录
+            self.update_progress(20, "正在登录...")
+            if not self.cleaner.login():
+                self.log("[ERROR] 登录失败")
+                self.update_status("登录失败", "red")
+                return
+
+            # 2. 设置MAC地址（如果配置了）
+            mac_mode = self.config_manager.get_config().get("mac_mode", "router")
+            self.update_progress(30, "正在设置MAC地址...")
+
+            if mac_mode == 'random':
+                self.log("[INFO] MAC模式: 随机MAC")
+                self.cleaner.set_mac_address('random')
+            elif mac_mode == 'pc':
+                self.log("[INFO] MAC模式: PC MAC")
+                self.cleaner.set_mac_address('pc')
+            else:
+                self.log("[INFO] MAC模式: 路由器默认")
+
+            # 3. 设置PPPoE账号密码
+            self.update_progress(50, "正在设置账号密码...")
+            if not self.cleaner.set_pppoe_account(broadband_user, broadband_pass):
+                self.log("[ERROR] 设置账号密码失败")
+                self.update_status("设置失败", "red")
+                return
+
+            # 4. 连接PPPoE
+            self.update_progress(70, "正在拨号连接...")
+            if not self.cleaner.connect_pppoe():
+                self.log("[ERROR] 连接失败")
+                self.update_status("连接失败", "red")
+                return
+
+            # 5. 等待连接建立（检查IP地址）
+            self.update_progress(80, "正在等待IP分配...")
+            self.log("[INFO] 等待IP地址分配（15秒）...")
+            import time as time_module
+            time_module.sleep(15)
+
+            # 6. 检查连接状态
+            self.update_progress(90, "正在验证连接...")
+            self.log("[INFO] 正在检查连接状态...")
+            wan_status = self.cleaner.get_wan_status()
+
+            if wan_status:
+                ip_address = wan_status.get("network", {}).get("wan_status", {}).get("ipaddr", "")
+                self.log(f"[INFO] WAN IP地址: {ip_address}")
+
+                if ip_address and ip_address != "0.0.0.0" and ip_address != "":
+                    self.log("=" * 60)
+                    self.log("[SUCCESS] 连接成功！")
+                    self.log(f"已获取IP地址: {ip_address}")
+                    self.log("=" * 60)
+                    connection_success = True
+                    self.update_status(f"已连接 IP: {ip_address}", "green")
+                    self.update_progress(100, "连接成功！")
+                else:
+                    self.log("[WARNING] 未获取到有效IP地址")
+                    self.update_status("连接失败", "orange")
+            else:
+                self.log("[WARNING] 无法获取连接状态")
+                self.update_status("状态未知", "orange")
+
+        except Exception as e:
+            self.log(f"[ERROR] 连接时发生错误: {e}")
+            import traceback
+            self.log(traceback.format_exc())
+            connection_success = False
+
+        # 恢复按钮状态
+        self.log("[INFO] 正在恢复按钮状态...")
+        if connection_success:
+            self.update_button("disconnect", tk.NORMAL, "断开并清除")
+            self.update_button("connect", tk.DISABLED, "已连接")
+        else:
+            self.update_button("disconnect", tk.NORMAL, "断开并清除")
+            self.update_button("connect", tk.NORMAL, "重新连接")
+        self.stop_progress()
+
+        return connection_success
 
     def quit_app(self):
         """退出应用"""
