@@ -605,15 +605,6 @@ class TPLinkHTTPCleaner:
             pass
 
         return {}
-                time.sleep(1)
-                return True
-            else:
-                self._log(f"⚠️ 保存失败 (HTTP {response.status_code})")
-                return False
-
-        except Exception as e:
-            self._log(f"❌ 保存异常: {e}")
-            return False
 
     def run_cleanup(self) -> bool:
         """
