@@ -140,10 +140,9 @@ class RouterLoginGUI:
 
         self.reconnect_button = ttk.Button(
             button_frame,
-            text="重新连接",
+            text="开始连接",
             command=self.reconnect,
-            width=20,
-            state=tk.DISABLED
+            width=20
         )
         self.reconnect_button.pack(side=tk.LEFT, padx=5)
 
