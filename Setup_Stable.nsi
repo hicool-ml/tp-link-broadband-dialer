@@ -1,12 +1,13 @@
-; TPLink Dialer - Stable Setup Script
+﻿; TPLink Dialer - Stable Setup Script
 ; Fixed installer integrity check issue
 
 !include "MUI2.nsh"
+!include "x64.nsh"
 
 ; Installer Configuration
 Name "Broadband Dial Tool v2.1"
 OutFile "Release\Setup.exe"
-InstallDir "$PROGRAMFILES\TPLinkDialer"
+InstallDir "$PROGRAMFILES64\TPLinkDialer"
 InstallDirRegKey HKLM "Software\TPLinkDialer" "InstallPath"
 RequestExecutionLevel admin
 
@@ -33,7 +34,7 @@ VIAddVersionKey "LegalCopyright" "2026"
 
 ; Finish Page
 !define MUI_FINISHPAGE_RUN "$INSTDIR\TP-Link_Dialer.exe"
-!define MUI_FINISHPAGE_RUN_TEXT "Launch Broadband Dial Tool"
+!define MUI_FINISHPAGE_RUN_TEXT "启动宽带拨号"
 !insertmacro MUI_PAGE_FINISH
 
 ; Uninstall Pages
@@ -54,17 +55,24 @@ Section "Main Program" SecMain
     ; Install main program
     File /r "dist\TP-Link_Dialer\*"
 
+    ; Install icon files
+    File "app.ico"
+    File "online.ico"
+    File "offline.ico"
+    File "connecting.ico"
+    File "error.ico"
+
     ; Create desktop shortcut
-    CreateShortCut "$DESKTOP\Broadband Dial Tool.lnk" "$INSTDIR\TP-Link_Dialer.exe" "" "$INSTDIR\app.ico" 0
+    CreateShortCut "$DESKTOP\宽带拨号.lnk" "$INSTDIR\TP-Link_Dialer.exe" "" "$INSTDIR\app.ico" 0
 
     ; Create start menu shortcuts
-    CreateDirectory "$SMPROGRAMS\Broadband Dial Tool"
-    CreateShortCut "$SMPROGRAMS\Broadband Dial Tool\Broadband Dial Tool.lnk" "$INSTDIR\TP-Link_Dialer.exe" "" "$INSTDIR\app.ico" 0
-    CreateShortCut "$SMPROGRAMS\Broadband Dial Tool\Uninstall.lnk" "$INSTDIR\uninstall.exe"
+    CreateDirectory "$SMPROGRAMS\宽带拨号"
+    CreateShortCut "$SMPROGRAMS\宽带拨号\宽带拨号.lnk" "$INSTDIR\TP-Link_Dialer.exe" "" "$INSTDIR\app.ico" 0
+    CreateShortCut "$SMPROGRAMS\宽带拨号\卸载.lnk" "$INSTDIR\uninstall.exe"
 
     ; Write registry
     WriteRegStr HKLM "Software\TPLinkDialer" "InstallPath" $INSTDIR
-    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\TPLinkDialer" "DisplayName" "Broadband Dial Tool"
+    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\TPLinkDialer" "DisplayName" "宽带拨号"
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\TPLinkDialer" "UninstallString" "$INSTDIR\uninstall.exe"
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\TPLinkDialer" "Publisher" "Kilo Code"
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\TPLinkDialer" "DisplayVersion" "2.1.0.0"
@@ -74,6 +82,8 @@ Section "Main Program" SecMain
 SectionEnd
 
 Section "Cleanup Service" SecService
+    SectionIn RO
+
     SetOutPath $INSTDIR
 
     ; Install cleanup service
@@ -105,19 +115,47 @@ SectionEnd
 
 ; Post-install
 Section "-PostInstall"
-    ; Install service if selected
-    IfFileExists "$INSTDIR\CleanupService.exe" 0 +2
+    DetailPrint ""
+    DetailPrint "=========================================="
+    DetailPrint "Step 6: Installing cleanup service..."
+    DetailPrint "=========================================="
+
+    ; Install cleanup service
+    IfFileExists "$INSTDIR\CleanupService.exe" 0 service_installed
+    DetailPrint "Installing cleanup service..."
     ExecWait '"$INSTDIR\CleanupService.exe" install'
+    Pop $0
+    DetailPrint "Service install result: $0"
+
+    service_installed:
 
     ; Start service
-    IfFileExists "$INSTDIR\CleanupService.exe" 0 +2
-    ExecWait 'net start TPLinkShutdownCleanup'
+    DetailPrint ""
+    DetailPrint "=========================================="
+    DetailPrint "Step 7: Starting cleanup service..."
+    DetailPrint "=========================================="
+
+    DetailPrint "Starting TPLinkShutdownCleanup service..."
+    nsExec::ExecToLog 'net start TPLinkShutdownCleanup'
+    Pop $0
+
+    ; Wait a bit for service to start
+    Sleep 3000
+
+    ; Verify service is running
+    nsExec::ExecToLog 'sc query TPLinkShutdownCleanup'
+    Pop $0
+
+    DetailPrint ""
+    DetailPrint "=========================================="
+    DetailPrint "Installation Complete!"
+    DetailPrint "=========================================="
 SectionEnd
 
 ; Uninstaller Section
 Section "Uninstall"
     ; Show uninstall confirmation
-    MessageBox MB_OKCANCEL "Are you sure you want to uninstall Broadband Dial Tool?$\n$\nThis will:$\n  - Stop and remove the cleanup service$\n  - Delete all program files$\n  - Remove shortcuts and registry entries$\n$\nNote: Your router configuration will be kept." IDCANCEL cancel_uninstall
+    MessageBox MB_OKCANCEL "确定要卸载宽带拨号吗？$\n$\n这将：$\n  - 停止并移除清理服务$\n  - 删除所有程序文件$\n  - 移除快捷方式和注册表项$\n$\n注意：您的路由器配置将被保留。" IDCANCEL cancel_uninstall
 
     ; Set details view
     SetDetailsView show
@@ -184,8 +222,8 @@ Section "Uninstall"
     DetailPrint "Step 5: Removing shortcuts..."
     DetailPrint "=========================================="
 
-    Delete "$DESKTOP\Broadband Dial Tool.lnk"
-    RMDir /r "$SMPROGRAMS\Broadband Dial Tool"
+    Delete "$DESKTOP\宽带拨号.lnk"
+    RMDir /r "$SMPROGRAMS\宽带拨号"
 
     DetailPrint "Shortcuts removed"
 

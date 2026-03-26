@@ -34,7 +34,7 @@ try:
 
     # 2. 设置随机MAC
     print("\n2. 设置随机MAC...")
-    if cleaner.set_mac_address('random'):
+    if cleaner.set_mac_address():
         print("MAC设置成功")
     else:
         print("MAC设置失败")

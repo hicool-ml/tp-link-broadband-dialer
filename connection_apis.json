@@ -1,0 +1,147 @@
+[
+  {
+    "type": "set_mac",
+    "url": "http://192.168.1.1/stok=KJEfKtXhr%3Ex7Nfd5%7B%3EWYCNLLDzE%2C2NlN/ds",
+    "data": "{\"system\":{\"name\":[\"sys\"]},\"hosts_info\":{\"table\":\"host_info\"},\"network\":{\"name\":\"iface_mac\"},\"function\":{\"name\":\"new_module_spec\"},\"method\":\"get\"}"
+  },
+  {
+    "type": "set_mac",
+    "url": "http://192.168.1.1/stok=KJEfKtXhr%3Ex7Nfd5%7B%3EWYCNLLDzE%2C2NlN/ds",
+    "data": "{\"cloud_config\":{\"name\":[\"new_firmware\",\"bind\",\"device_status\",\"bind_tip\"]},\"device_info\":{\"name\":\"info\"},\"cloud_status\":{\"name\":\"client_info\"},\"network\":{\"name\":\"iface_mac\"},\"hyfi\":{\"table\":\"connected_ext\"},\"method\":\"get\"}"
+  },
+  {
+    "type": "unknown",
+    "url": "http://192.168.1.1/stok=KJEfKtXhr%3Ex7Nfd5%7B%3EWYCNLLDzE%2C2NlN/ds",
+    "data": "{\"guest_network\":{\"name\":\"guest_5g\"},\"method\":\"get\"}"
+  },
+  {
+    "type": "unknown",
+    "url": "http://192.168.1.1/stok=KJEfKtXhr%3Ex7Nfd5%7B%3EWYCNLLDzE%2C2NlN/ds",
+    "data": "{\"wireless\":{\"name\":[\"wlan_wds_2g\",\"wlan_wds_5g\"]},\"network\":{\"name\":\"lan\"},\"method\":\"get\"}"
+  },
+  {
+    "type": "connect",
+    "url": "http://192.168.1.1/stok=KJEfKtXhr%3Ex7Nfd5%7B%3EWYCNLLDzE%2C2NlN/ds",
+    "data": "{\"network\":{\"name\":[\"wan_status\",\"wanv6_status\"]},\"protocol\":{\"name\":\"ipv6_info\"},\"cloud_config\":{\"name\":[\"new_firmware\",\"device_status\",\"bind\"]},\"wireless\":{\"name\":[\"wlan_wds_2g\",\"wlan_wds_5g\"]},\"hyfi\":{\"table\":\"connected_ext\"},\"method\":\"get\"}"
+  },
+  {
+    "type": "unknown",
+    "url": "http://192.168.1.1/stok=KJEfKtXhr%3Ex7Nfd5%7B%3EWYCNLLDzE%2C2NlN/ds",
+    "data": "{\"network\":{\"name\":[\"wan_status\",\"wanv6_status\"]},\"protocol\":{\"name\":[\"dhcp\",\"ipv6_info\"]},\"method\":\"get\"}"
+  },
+  {
+    "type": "connect",
+    "url": "http://192.168.1.1/stok=KJEfKtXhr%3Ex7Nfd5%7B%3EWYCNLLDzE%2C2NlN/ds",
+    "data": "{\"hyfi\":{\"table\":[\"connected_ext\"]},\"hosts_info\":{\"table\":\"online_host\",\"name\":\"cap_host_num\"},\"method\":\"get\"}"
+  },
+  {
+    "type": "unknown",
+    "url": "http://192.168.1.1/stok=KJEfKtXhr%3Ex7Nfd5%7B%3EWYCNLLDzE%2C2NlN/ds",
+    "data": "{\"guest_network\":{\"name\":\"guest_2g\"},\"method\":\"get\"}"
+  },
+  {
+    "type": "unknown",
+    "url": "http://192.168.1.1/stok=KJEfKtXhr%3Ex7Nfd5%7B%3EWYCNLLDzE%2C2NlN/ds",
+    "data": "{\"network\":{\"name\":[\"wan_status\",\"wanv6_status\"]},\"protocol\":{\"name\":[\"dhcp\",\"ipv6_info\"]},\"method\":\"get\"}"
+  },
+  {
+    "type": "connect",
+    "url": "http://192.168.1.1/stok=KJEfKtXhr%3Ex7Nfd5%7B%3EWYCNLLDzE%2C2NlN/ds",
+    "data": "{\"hyfi\":{\"table\":[\"connected_ext\"]},\"hosts_info\":{\"table\":\"online_host\",\"name\":\"cap_host_num\"},\"method\":\"get\"}"
+  },
+  {
+    "type": "set_mac",
+    "url": "http://192.168.1.1/stok=KJEfKtXhr%3Ex7Nfd5%7B%3EWYCNLLDzE%2C2NlN/ds",
+    "data": "{\"system\":{\"name\":[\"sys\"]},\"hosts_info\":{\"table\":\"host_info\"},\"network\":{\"name\":\"iface_mac\"},\"function\":{\"name\":\"new_module_spec\"},\"method\":\"get\"}"
+  },
+  {
+    "type": "set_mac",
+    "url": "http://192.168.1.1/stok=KJEfKtXhr%3Ex7Nfd5%7B%3EWYCNLLDzE%2C2NlN/ds",
+    "data": "{\"cloud_config\":{\"name\":[\"new_firmware\",\"bind\",\"device_status\",\"bind_tip\"]},\"device_info\":{\"name\":\"info\"},\"cloud_status\":{\"name\":\"client_info\"},\"network\":{\"name\":\"iface_mac\"},\"hyfi\":{\"table\":\"connected_ext\"},\"method\":\"get\"}"
+  },
+  {
+    "type": "unknown",
+    "url": "http://192.168.1.1/stok=KJEfKtXhr%3Ex7Nfd5%7B%3EWYCNLLDzE%2C2NlN/ds",
+    "data": "{\"guest_network\":{\"name\":\"guest_5g\"},\"method\":\"get\"}"
+  },
+  {
+    "type": "unknown",
+    "url": "http://192.168.1.1/stok=KJEfKtXhr%3Ex7Nfd5%7B%3EWYCNLLDzE%2C2NlN/ds",
+    "data": "{\"wireless\":{\"name\":[\"wlan_wds_2g\",\"wlan_wds_5g\"]},\"network\":{\"name\":\"lan\"},\"method\":\"get\"}"
+  },
+  {
+    "type": "connect",
+    "url": "http://192.168.1.1/stok=KJEfKtXhr%3Ex7Nfd5%7B%3EWYCNLLDzE%2C2NlN/ds",
+    "data": "{\"network\":{\"name\":[\"wan_status\",\"wanv6_status\"]},\"protocol\":{\"name\":\"ipv6_info\"},\"cloud_config\":{\"name\":[\"new_firmware\",\"device_status\",\"bind\"]},\"wireless\":{\"name\":[\"wlan_wds_2g\",\"wlan_wds_5g\"]},\"hyfi\":{\"table\":\"connected_ext\"},\"method\":\"get\"}"
+  },
+  {
+    "type": "unknown",
+    "url": "http://192.168.1.1/stok=KJEfKtXhr%3Ex7Nfd5%7B%3EWYCNLLDzE%2C2NlN/ds",
+    "data": "{\"network\":{\"name\":[\"wan_status\",\"wanv6_status\"]},\"protocol\":{\"name\":[\"dhcp\",\"ipv6_info\"]},\"method\":\"get\"}"
+  },
+  {
+    "type": "unknown",
+    "url": "http://192.168.1.1/stok=KJEfKtXhr%3Ex7Nfd5%7B%3EWYCNLLDzE%2C2NlN/ds",
+    "data": "{\"guest_network\":{\"name\":\"guest_2g\"},\"method\":\"get\"}"
+  },
+  {
+    "type": "connect",
+    "url": "http://192.168.1.1/stok=KJEfKtXhr%3Ex7Nfd5%7B%3EWYCNLLDzE%2C2NlN/ds",
+    "data": "{\"hyfi\":{\"table\":[\"connected_ext\"]},\"hosts_info\":{\"table\":\"online_host\",\"name\":\"cap_host_num\"},\"method\":\"get\"}"
+  },
+  {
+    "type": "connect",
+    "url": "http://192.168.1.1/stok=KJEfKtXhr%3Ex7Nfd5%7B%3EWYCNLLDzE%2C2NlN/ds",
+    "data": "{\"network\":{\"name\":[\"wan_status\",\"wanv6_status\"]},\"protocol\":{\"name\":\"ipv6_info\"},\"cloud_config\":{\"name\":[\"new_firmware\",\"device_status\",\"bind\"]},\"wireless\":{\"name\":[\"wlan_wds_2g\",\"wlan_wds_5g\"]},\"hyfi\":{\"table\":\"connected_ext\"},\"method\":\"get\"}"
+  },
+  {
+    "type": "unknown",
+    "url": "http://192.168.1.1/stok=KJEfKtXhr%3Ex7Nfd5%7B%3EWYCNLLDzE%2C2NlN/ds",
+    "data": "{\"protocol\":{\"name\":\"wan\"},\"function\":{\"name\":\"module_spec\"},\"method\":\"get\"}"
+  },
+  {
+    "type": "set_mac",
+    "url": "http://192.168.1.1/stok=KJEfKtXhr%3Ex7Nfd5%7B%3EWYCNLLDzE%2C2NlN/ds",
+    "data": "{\"protocol\":{\"name\":[\"wan\",\"pppoe\"]},\"network\":{\"name\":[\"wan_status\",\"iface_mac\"]},\"method\":\"get\"}"
+  },
+  {
+    "type": "unknown",
+    "url": "http://192.168.1.1/stok=KJEfKtXhr%3Ex7Nfd5%7B%3EWYCNLLDzE%2C2NlN/ds",
+    "data": "{\"wan_port_detect\":{\"name\":\"config\"},\"method\":\"get\"}"
+  },
+  {
+    "type": "unknown",
+    "url": "http://192.168.1.1/stok=KJEfKtXhr%3Ex7Nfd5%7B%3EWYCNLLDzE%2C2NlN/ds",
+    "data": "{\"network\":{\"name\":[\"wan_status\"]},\"method\":\"get\"}"
+  },
+  {
+    "type": "set_mac",
+    "url": "http://192.168.1.1/stok=KJEfKtXhr%3Ex7Nfd5%7B%3EWYCNLLDzE%2C2NlN/ds",
+    "data": "{\"protocol\":{\"wan\":{\"macaddr\":\"02-98-5D-6E-CE-0D\",\"wan_rate\":\"auto\"},\"pppoe\":{\"dial_mode\":\"auto\",\"conn_mode\":\"auto\",\"mtu\":\"1480\",\"access\":\"\",\"server\":\"\",\"ip_mode\":\"dynamic\",\"dns_mode\":\"dynamic\",\"proto\":\"none\"}},\"method\":\"set\"}"
+  },
+  {
+    "type": "unknown",
+    "url": "http://192.168.1.1/stok=KJEfKtXhr%3Ex7Nfd5%7B%3EWYCNLLDzE%2C2NlN/ds",
+    "data": "{\"network\":{\"name\":[\"wan_status\"]},\"method\":\"get\"}"
+  },
+  {
+    "type": "unknown",
+    "url": "http://192.168.1.1/stok=KJEfKtXhr%3Ex7Nfd5%7B%3EWYCNLLDzE%2C2NlN/ds",
+    "data": "{\"network\":{\"name\":[\"wan_status\"]},\"method\":\"get\"}"
+  },
+  {
+    "type": "connect",
+    "url": "http://192.168.1.1/stok=KJEfKtXhr%3Ex7Nfd5%7B%3EWYCNLLDzE%2C2NlN/ds",
+    "data": "{\"network\":{\"name\":[\"wan_status\",\"wanv6_status\"]},\"protocol\":{\"name\":\"ipv6_info\"},\"cloud_config\":{\"name\":[\"new_firmware\",\"device_status\",\"bind\"]},\"wireless\":{\"name\":[\"wlan_wds_2g\",\"wlan_wds_5g\"]},\"hyfi\":{\"table\":\"connected_ext\"},\"method\":\"get\"}"
+  },
+  {
+    "type": "set_pppoe",
+    "url": "http://192.168.1.1/stok=KJEfKtXhr%3Ex7Nfd5%7B%3EWYCNLLDzE%2C2NlN/ds",
+    "data": "{\"protocol\":{\"wan\":{\"wan_type\":\"pppoe\"},\"pppoe\":{\"username\":\"test123\",\"password\":\"test123456\"}},\"method\":\"set\"}"
+  },
+  {
+    "type": "connect",
+    "url": "http://192.168.1.1/stok=KJEfKtXhr%3Ex7Nfd5%7B%3EWYCNLLDzE%2C2NlN/ds",
+    "data": "{\"network\":{\"change_wan_status\":{\"proto\":\"pppoe\",\"operate\":\"connect\"}},\"method\":\"do\"}"
+  }
+]

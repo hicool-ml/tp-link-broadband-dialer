@@ -1,0 +1,9 @@
+TP-Link路由器账号清理服务管理工具
+
+用法:
+  python shutdown_cleanup_service.py install   - 安装服务
+  python shutdown_cleanup_service.py remove    - 卸载服务
+  python shutdown_cleanup_service.py start     - 启动服务
+  python shutdown_cleanup_service.py stop      - 停止服务
+  python shutdown_cleanup_service.py restart   - 重启服务
+  python shutdown_cleanup_service.py status    - 查看状态

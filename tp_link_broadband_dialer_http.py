@@ -15,6 +15,7 @@ import subprocess
 import ctypes
 import atexit
 import time
+import logging
 from pathlib import Path
 import io
 
@@ -33,6 +34,36 @@ from config_manager import ConfigManager
 # 导入HTTP清理模块
 from tplink_http_cleaner import TPLinkHTTPCleaner
 
+# 尝试导入PIL和pystray（可选依赖）
+try:
+    from PIL import Image, ImageDraw
+    PIL_AVAILABLE = True
+except ImportError:
+    PIL_AVAILABLE = False
+    Image = None
+    ImageDraw = None
+
+try:
+    import pystray
+    from pystray import Menu, MenuItem
+    PYSTRAY_AVAILABLE = True
+except ImportError:
+    PYSTRAY_AVAILABLE = False
+    pystray = None
+    Menu = None
+    MenuItem = None
+
+# 检查托盘功能是否可用
+TRAY_AVAILABLE = PYSTRAY_AVAILABLE and PIL_AVAILABLE
+if not TRAY_AVAILABLE:
+    missing = []
+    if not PYSTRAY_AVAILABLE:
+        missing.append("pystray")
+    if not PIL_AVAILABLE:
+        missing.append("PIL")
+    print(f"警告: 未安装 {', '.join(missing)} 库，系统托盘功能不可用")
+    print("如需系统托盘功能，请运行: pip install pystray pillow")
+
 
 # ========== 核心：强制程序只使用内置资源 ==========
 def get_resource_path(relative_path):
@@ -50,40 +81,19 @@ class RouterLoginGUI:
 
     def __init__(self, root):
         self.root = root
-        self.root.title("TP-Link 宽带拨号助手")
-
-        # 窗口居中
-        window_width = 600
-        window_height = 500
-        screen_width = root.winfo_screenwidth()
-        screen_height = root.winfo_screenheight()
-        x = (screen_width - window_width) // 2
-        y = (screen_height - window_height) // 2
-        self.root.geometry(f"{window_width}x{window_height}+{x}+{y}")
-
-        # 禁止调整窗口大小
+        self.root.title("宽带拨号")
+        self.root.geometry("400x320")
         self.root.resizable(False, False)
 
-        # 设置窗口图标
-        try:
-            icon_path = get_resource_path("app.ico")
-            if Path(icon_path).exists():
-                self.root.iconbitmap(icon_path)
-        except:
-            pass
-
-        # 日志队列（用于线程间通信）
-        self.log_queue = queue.Queue()
-
-        # 保存的账号密码
-        self.saved_account = ""
-        self.saved_password = ""
-
-        # 加载配置
+        # 路由器配置
         self.config_manager = ConfigManager()
         config = self.config_manager.get_config()
         self.router_ip = config.get("router_ip", "192.168.1.1")
         self.router_password = config.get("router_password", "")
+
+        # 保存的账号密码
+        self.saved_account = ""
+        self.saved_password = ""
 
         # HTTP 清理器
         self.cleaner = None
@@ -91,111 +101,168 @@ class RouterLoginGUI:
         # 关闭标志
         self.is_closing = False
 
-        # 初始化界面
-        self.setup_ui()
+        # 日志队列
+        self.log_queue = queue.Queue()
+
+        # 调试窗口
+        self.debug_window = None
+        self.debug_text = None
+
+        # 系统托盘图标
+        self.tray_icon = None
+
+        # 托盘图标状态
+        self.tray_icon_status = "offline"  # offline, online, connecting, error
+
+        # 托盘图标双击检测
+        self._last_click_time = 0
+        self._click_count = 0
+
+        # 创建界面
+        self.create_widgets()
 
         # 启动日志处理
         self.process_log_queue()
 
-        # 显示欢迎信息
-        self.log("=" * 60)
+        # 创建系统托盘图标（如果可用）
+        if TRAY_AVAILABLE:
+            self.create_tray_icon()
+
+        # 欢迎信息
+        self.log("=" * 50)
         self.log("TP-Link 宽带拨号助手 (HTTP API 版本)")
-        self.log("=" * 60)
-        self.log(f"路由器IP: {self.router_ip}")
-        self.log(f"版本特点: 不使用浏览器，直接通过HTTP API操作")
-        self.log("=" * 60)
+        self.log(f"路由器: {self.router_ip}")
+        self.log("=" * 50)
 
-    def setup_ui(self):
-        """初始化界面"""
-        # 顶部状态栏
-        status_frame = ttk.Frame(self.root, padding="10")
-        status_frame.pack(fill=tk.X)
-
-        ttk.Label(status_frame, text="当前状态:", font=("Arial", 10, "bold")).pack(side=tk.LEFT)
-        self.status_label = ttk.Label(status_frame, text="就绪", foreground="green", cursor="hand2")
-        self.status_label.pack(side=tk.LEFT, padx=5)
-
-        # 状态标签右键菜单（隐藏功能入口）
-        status_menu = tk.Menu(self.root, tearoff=0)
-        status_menu.add_command(label="路由器设置 (Ctrl+R)", command=lambda: self.root.event_generate('<Control-r>'))
-        status_menu.add_command(label="查看日志 (Ctrl+L)", command=lambda: self.root.event_generate('<Control-l>'))
-        status_menu.add_separator()
-        status_menu.add_command(label="关于", command=self.show_about)
-
-        def show_status_menu(event):
-            status_menu.post(event.x_root, event.y_root)
-
-        self.status_label.bind("<Button-3>", show_status_menu)
-
-        # 进度条
-        self.progress_var = tk.DoubleVar()
-        self.progress_bar = ttk.Progressbar(
-            status_frame,
-            variable=self.progress_var,
-            maximum=100,
-            length=200,
-            mode='determinate'
+    def create_widgets(self):
+        """创建界面组件"""
+        # 标题（双击标题可打开设置）
+        title_label = tk.Label(
+            self.root,
+            text="宽带拨号",
+            font=("Arial", 16, "bold")
         )
-        self.progress_bar.pack(side=tk.RIGHT, padx=5)
+        title_label.pack(pady=15)
+        # 绑定双击标题打开设置
+        title_label.bind("<Double-Button-1>", lambda e: self.show_settings())
+
+        # 账号输入框
+        account_frame = tk.Frame(self.root)
+        account_frame.pack(pady=8, padx=30, fill=tk.X)
+
+        tk.Label(account_frame, text="宽带账号:", font=("Arial", 10)).pack(side=tk.LEFT, padx=5)
+        self.account_entry = tk.Entry(account_frame, font=("Arial", 10), width=25)
+        self.account_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        # 绑定回车键
+        self.account_entry.bind("<Return>", lambda e: self.password_entry.focus())
+
+        # 密码输入框
+        password_frame = tk.Frame(self.root)
+        password_frame.pack(pady=8, padx=30, fill=tk.X)
+
+        tk.Label(password_frame, text="宽带密码:", font=("Arial", 10)).pack(side=tk.LEFT, padx=5)
+        self.password_entry = tk.Entry(password_frame, font=("Arial", 10), width=25, show="*")
+        self.password_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        # 绑定回车键到连接
+        self.password_entry.bind("<Return>", lambda e: self.start_connection())
 
         # 按钮区域
-        button_frame = ttk.Frame(self.root, padding="10")
-        button_frame.pack(fill=tk.X)
+        button_frame = tk.Frame(self.root)
+        button_frame.pack(pady=15)
 
-        self.disconnect_button = ttk.Button(
-            button_frame,
-            text="断开并清除",
-            command=self.disconnect_and_clear,
-            width=20
-        )
-        self.disconnect_button.pack(side=tk.LEFT, padx=5)
-
-        self.reconnect_button = ttk.Button(
+        self.connect_button = tk.Button(
             button_frame,
             text="开始连接",
-            command=self.reconnect,
-            width=20
+            command=self.start_connection,
+            font=("Arial", 11, "bold"),
+            bg="#4CAF50",
+            fg="white",
+            width=12,
+            height=2,
+            cursor="hand2"
         )
-        self.reconnect_button.pack(side=tk.LEFT, padx=5)
+        self.connect_button.pack(side=tk.LEFT, padx=8)
 
-        # 日志区域
-        log_frame = ttk.LabelFrame(self.root, text="操作日志", padding="10")
-        log_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
-
-        self.log_text = scrolledtext.ScrolledText(
-            log_frame,
-            height=20,
-            width=70,
-            font=("Consolas", 9)
+        self.disconnect_button = tk.Button(
+            button_frame,
+            text="断开连接",
+            command=self.disconnect_and_clear,
+            font=("Arial", 11, "bold"),
+            bg="#f44336",
+            fg="white",
+            width=12,
+            height=2,
+            cursor="hand2"
         )
-        self.log_text.pack(fill=tk.BOTH, expand=True)
+        self.disconnect_button.pack(side=tk.LEFT, padx=8)
 
-        # 配置日志标签颜色
-        self.log_text.tag_config("INFO", foreground="black")
-        self.log_text.tag_config("SUCCESS", foreground="green")
-        self.log_text.tag_config("ERROR", foreground="red")
-        self.log_text.tag_config("WARNING", foreground="orange")
+        # 提示文字
+        hint_label = tk.Label(
+            self.root,
+            text="提示：使用完成后可点击断开按钮清除账号\n系统关机时后台服务会自动清理路由器账号",
+            font=("Arial", 9, "bold"),
+            fg="#0066CC",
+            justify=tk.CENTER
+        )
+        hint_label.pack(pady=(5, 0))
 
-        # 底部按钮
-        bottom_frame = ttk.Frame(self.root, padding="10")
-        bottom_frame.pack(fill=tk.X)
+        # 进度条（双击可查看日志）
+        progress_frame = tk.Frame(self.root)
+        progress_frame.pack(pady=15, padx=30, fill=tk.X)
 
-        ttk.Button(bottom_frame, text="清空日志", command=self.clear_log).pack(side=tk.LEFT, padx=5)
-        ttk.Button(bottom_frame, text="退出", command=self.quit_app).pack(side=tk.RIGHT, padx=5)
+        self.progress_label = tk.Label(
+            progress_frame,
+            text="",
+            font=("Arial", 9)
+        )
+        self.progress_label.pack(anchor=tk.W)
+
+        self.progress_var = tk.DoubleVar()
+        self.progress_bar = ttk.Progressbar(
+            progress_frame,
+            variable=self.progress_var,
+            orient=tk.HORIZONTAL,
+            mode='determinate',
+            maximum=100
+        )
+        self.progress_bar.pack(fill=tk.X)
+
+        # 绑定双击事件打开调试窗口
+        self.progress_bar.bind("<Double-Button-1>", lambda e: self.toggle_debug_window())
+        self.progress_label.bind("<Double-Button-1>", lambda e: self.toggle_debug_window())
+
+        # 状态栏（左下角，双击查看日志）
+        status_frame = tk.Frame(self.root)
+        status_frame.pack(side=tk.BOTTOM, fill=tk.X)
+
+        self.status_label = tk.Label(
+            status_frame,
+            text="就绪 | 双击进度条可查看运行日志",
+            font=("Arial", 9),
+            bd=1,
+            relief=tk.SUNKEN,
+            anchor=tk.W
+        )
+        self.status_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        # 绑定双击打开日志
+        self.status_label.bind("<Double-Button-1>", lambda e: self.toggle_debug_window())
 
     def log(self, message, level="INFO"):
         """记录日志到队列"""
         self.log_queue.put((message, level))
 
     def process_log_queue(self):
-        """处理日志队列（从队列中取出日志并显示）"""
+        """处理日志队列"""
         try:
             while True:
                 message, level = self.log_queue.get_nowait()
 
-                # 显示到日志框
-                self.log_text.insert(tk.END, message + "\n", level)
-                self.log_text.see(tk.END)
+                # 显示到日志框（如果存在）
+                if self.debug_text and self.debug_window and self.debug_window.winfo_exists():
+                    self.debug_text.config(state=tk.NORMAL)
+                    self.debug_text.insert(tk.END, message + "\n")
+                    self.debug_text.see(tk.END)
+                    self.debug_text.config(state=tk.DISABLED)
 
                 # 同时输出到控制台
                 print(message)
@@ -205,168 +272,403 @@ class RouterLoginGUI:
         # 100ms后再次检查
         self.root.after(100, self.process_log_queue)
 
-    def clear_log(self):
-        """清空日志"""
-        self.log_text.delete(1.0, tk.END)
+    def clear_debug_log(self):
+        """清空调试日志"""
+        self.debug_text.config(state=tk.NORMAL)
+        self.debug_text.delete(1.0, tk.END)
+        self.debug_text.config(state=tk.DISABLED)
 
-    def update_status(self, status, color="green"):
-        """更新状态栏"""
-        self.status_label.config(text=status, foreground=color)
+    def toggle_debug_window(self):
+        """切换调试窗口显示/隐藏"""
+        if self.debug_window is None or not self.debug_window.winfo_exists():
+            self.create_debug_window()
+        else:
+            if self.debug_window.state() == 'withdrawn':
+                self.debug_window.deiconify()
+                self.debug_window.lift()
+                self.debug_window.focus_force()
+            else:
+                self.debug_window.withdraw()
+
+    def create_debug_window(self):
+        """创建调试窗口"""
+        if self.debug_window is None or not self.debug_window.winfo_exists():
+            self.debug_window = tk.Toplevel(self.root)
+            self.debug_window.title("运行日志 - 宽带拨号")
+            self.debug_window.geometry("600x400")
+
+            # 设置为非模态窗口
+            self.debug_window.transient(self.root)
+
+            # 调试信息显示区域
+            debug_label = tk.Label(self.debug_window, text="运行日志:", font=("Arial", 10, "bold"))
+            debug_label.pack(pady=(10, 5), padx=10, anchor=tk.W)
+
+            self.debug_text = scrolledtext.ScrolledText(
+                self.debug_window,
+                height=20,
+                font=("Consolas", 9),
+                state=tk.DISABLED
+            )
+            self.debug_text.pack(pady=5, padx=10, fill=tk.BOTH, expand=True)
+
+            # 清空按钮
+            clear_button = tk.Button(
+                self.debug_window,
+                text="清空日志",
+                command=self.clear_debug_log,
+                font=("Arial", 9)
+            )
+            clear_button.pack(pady=5)
+
+            # 关闭按钮
+            close_button = tk.Button(
+                self.debug_window,
+                text="关闭",
+                command=self.debug_window.destroy,
+                font=("Arial", 9)
+            )
+            close_button.pack(pady=5)
+
+            # 窗口关闭事件
+            self.debug_window.protocol("WM_DELETE_WINDOW", lambda: self.debug_window.withdraw())
 
     def update_progress(self, value, text=None):
         """更新进度条"""
         self.progress_var.set(value)
         if text:
-            self.log(f"[进度] {text}")
+            self.progress_label.config(text=text)
 
-    def stop_progress(self):
-        """停止进度条"""
-        self.progress_var.set(0)
+    def update_status(self, status, color="black"):
+        """更新状态栏"""
+        self.status_label.config(text=f"{status} | 双击进度条可查看运行日志", fg=color)
 
     def update_button(self, button_name, state, text=None):
         """更新按钮状态"""
-        if button_name == "disconnect":
+        if button_name == "connect":
+            if text:
+                self.connect_button.config(text=text, state=state)
+            else:
+                self.connect_button.config(state=state)
+        elif button_name == "disconnect":
             if text:
                 self.disconnect_button.config(text=text, state=state)
             else:
                 self.disconnect_button.config(state=state)
-        elif button_name == "connect":
-            if text:
-                self.reconnect_button.config(text=text, state=state)
-            else:
-                self.reconnect_button.config(state=state)
 
-    def disconnect_and_clear(self):
-        """断开并清除账号密码"""
+    def create_tray_icon(self):
+        """创建系统托盘图标"""
+        if not TRAY_AVAILABLE:
+            return
+
+        try:
+            # 创建图标 - 加载offline.ico作为默认图标
+            icon_image = self.load_status_icon('offline')
+
+            # 创建菜单
+            menu = Menu(
+                MenuItem('显示窗口', self.show_window),
+                MenuItem('隐藏窗口', self.hide_to_tray),
+                MenuItem('断开并清除', self.disconnect_from_tray),
+                MenuItem('退出', self.quit_app),
+            )
+
+            # 创建托盘图标
+            self.tray_icon = pystray.Icon(
+                "宽带拨号",
+                icon_image,
+                "宽带拨号 - 未连接",
+                menu
+            )
+
+            # 设置点击事件
+            def on_click(icon, button, time):
+                """处理托盘图标点击事件"""
+                if button == pystray.MouseButton.LEFT:
+                    # 双击检测
+                    current_time = time
+                    if current_time - self._last_click_time < 500:  # 500ms内双击
+                        self._click_count += 1
+                        if self._click_count == 2:
+                            # 双击：显示窗口
+                            self.show_window()
+                            self._click_count = 0
+                    else:
+                        self._click_count = 1
+                    self._last_click_time = current_time
+
+            # 设置点击事件
+            self.tray_icon.on_click = on_click
+
+            # 在单独的线程中运行托盘图标
+            def run_tray():
+                self.tray_icon.run()
+
+            tray_thread = threading.Thread(target=run_tray, daemon=True)
+            tray_thread.start()
+
+            self.log("✅ 系统托盘图标已创建")
+            self.log("💡 双击托盘图标可显示窗口")
+
+        except Exception as e:
+            self.log(f"⚠️ 创建系统托盘图标失败: {e}")
+            self.tray_icon = None
+
+    def load_status_icon(self, status):
+        """加载指定状态的图标文件
+
+        Args:
+            status: 状态名称
+
+        Returns:
+            PIL.Image对象或None
+        """
+        if not PIL_AVAILABLE:
+            return None
+
+        try:
+            # 尝试从多个可能的路径加载图标
+            icon_filename = f"{status}.ico"
+            possible_paths = [
+                # 当前目录
+                icon_filename,
+                # PyInstaller打包后的_internal目录
+                os.path.join(sys._MEIPASS, '_internal', icon_filename) if getattr(sys, 'frozen', False) else None,
+                os.path.join(sys._MEIPASS, icon_filename) if getattr(sys, 'frozen', False) else None,
+                # 项目根目录（开发环境）
+                os.path.join(Path(__file__).parent, icon_filename),
+            ]
+
+            for path in possible_paths:
+                if path and os.path.exists(path):
+                    try:
+                        img = Image.open(path)
+                        self.log(f"✅ 加载状态图标: {status} ({path})")
+                        return img
+                    except Exception as e:
+                        self.log(f"⚠️ 加载图标失败 {path}: {e}")
+                        continue
+
+            # 如果找不到图标文件，使用默认图标
+            self.log(f"⚠️ 未找到图标文件: {icon_filename}，使用默认图标")
+            return self.create_default_icon()
+
+        except Exception as e:
+            self.log(f"⚠️ 加载状态图标时出错: {e}")
+            return self.create_default_icon()
+
+    def create_default_icon(self):
+        """创建默认的网络图标"""
+        if not PIL_AVAILABLE:
+            return None
+
+        # 创建一个64x64的图标
+        img = Image.new('RGB', (64, 64), (0, 120, 215))  # Windows蓝色背景
+        draw = ImageDraw.Draw(img)
+
+        # 绘制网络图标（两个电脑连接的形状）
+        # 左边电脑
+        draw.rectangle([4, 24, 20, 40], fill='white')
+        draw.rectangle([6, 20, 18, 24], fill='white')
+
+        # 右边电脑
+        draw.rectangle([44, 24, 60, 40], fill='white')
+        draw.rectangle([46, 20, 58, 24], fill='white')
+
+        # 连接线
+        draw.line([20, 32, 44, 32], fill='white', width=2)
+
+        # 中间节点
+        draw.ellipse([28, 28, 36, 36], fill='white')
+
+        return img
+
+    def create_status_icon(self, status):
+        """创建指定状态的图标"""
+        if not PIL_AVAILABLE:
+            return None
+
+        # 颜色映射
+        colors = {
+            'offline': (117, 117, 117),  # 灰色 #757575
+            'online': (76, 175, 80),     # 绿色 #4CAF50
+            'connecting': (33, 150, 243),  # 蓝色 #2196F3
+            'error': (244, 67, 54)       # 红色 #f44336
+        }
+
+        color = colors.get(status, (33, 150, 243))
+
+        # 创建一个64x64的图标
+        img = Image.new('RGB', (64, 64), color)
+        draw = ImageDraw.Draw(img)
+
+        # 绘制网络图标（两个电脑连接的形状）
+        # 左边电脑
+        draw.rectangle([4, 24, 20, 40], fill='white')
+        draw.rectangle([6, 20, 18, 24], fill='white')
+
+        # 右边电脑
+        draw.rectangle([44, 24, 60, 40], fill='white')
+        draw.rectangle([46, 20, 58, 24], fill='white')
+
+        # 连接线
+        draw.line([20, 32, 44, 32], fill='white', width=2)
+
+        # 中间节点
+        draw.ellipse([28, 28, 36, 36], fill='white')
+
+        return img
+
+    def update_tray_icon(self, status, ip_address=None):
+        """更新托盘图标
+
+        Args:
+            status: 状态名称
+            ip_address: IP地址（可选，用于显示）
+        """
+        if not TRAY_AVAILABLE or not self.tray_icon:
+            return
+
+        try:
+            # 加载对应状态的图标文件
+            new_icon = self.load_status_icon(status)
+            if new_icon:
+                # 更新托盘图标
+                self.tray_icon.icon = new_icon
+
+                # 更新托盘提示文字
+                status_texts = {
+                    'offline': '宽带拨号 - 未连接',
+                    'online': '宽带拨号 - 已连接',
+                    'connecting': '宽带拨号 - 连接中...',
+                    'error': '宽带拨号 - 连接失败'
+                }
+
+                if status == 'online' and ip_address:
+                    self.tray_icon.title = f'宽带拨号 - 已连接 ({ip_address})'
+                else:
+                    self.tray_icon.title = status_texts.get(status, '宽带拨号')
+
+                self.tray_icon_status = status
+                self.log(f"✅ 托盘图标已更新: {status}")
+        except Exception as e:
+            self.log(f"⚠️ 更新托盘图标失败: {e}")
+
+    def show_window(self, icon=None, item=None):
+        """显示窗口"""
+        self.root.deiconify()  # 显示窗口
+        self.root.lift()  # 提升到前台
+        self.root.focus_force()  # 强制获取焦点
+
+    def hide_to_tray(self, icon=None, item=None):
+        """隐藏窗口到系统托盘"""
+        if self.tray_icon and TRAY_AVAILABLE:
+            self.root.withdraw()  # 隐藏窗口
+            self.log("窗口已隐藏到系统托盘")
+            self.log("双击托盘图标可重新显示窗口")
+
+    def disconnect_from_tray(self, icon=None, item=None):
+        """从托盘菜单断开连接"""
+        self.show_window()
+        self.disconnect_and_clear()
+
+    def quit_app(self, icon=None, item=None):
+        """从托盘菜单退出应用"""
+        # 如果有保存的账号，需要先断开并清除
+        if self.saved_account:
+            # 防止重复触发关闭事件
+            if self.is_closing:
+                return
+
+            # 设置关闭标志
+            self.is_closing = True
+
+            # 停止进度条（如果正在运行）
+            self.stop_progress()
+
+            self.log("=" * 50)
+            self.log("检测到退出请求，自动执行断开并清除...")
+            self.log("=" * 50)
+
+            # 强制更新UI
+            if self.debug_text:
+                self.debug_text.update()
+            self.root.update_idletasks()
+
+            # 创建断开完成的标志
+            disconnect_complete = threading.Event()
+
+            # 包装断开函数，完成后设置标志
+            def disconnect_with_callback():
+                try:
+                    self.run_disconnect()
+                finally:
+                    disconnect_complete.set()
+
+            # 在新线程中执行断开，避免阻塞GUI关闭
+            thread = threading.Thread(target=disconnect_with_callback)
+            thread.daemon = True
+            thread.start()
+
+            # 轮询等待断开完成（最多10秒）
+            def wait_disconnect():
+                if disconnect_complete.is_set():
+                    # 断开成功，停止托盘图标并退出
+                    self.log("[OK] 断开并清除成功，退出程序...")
+                    if self.tray_icon:
+                        self.tray_icon.stop()
+                    self.root.after(50, self.root.destroy)
+                else:
+                    # 继续等待，使用after避免阻塞
+                    self.root.after(100, wait_disconnect)
+
+            # 开始等待
+            self.root.after(100, wait_disconnect)
+        else:
+            # 没有保存的账号，直接退出
+            if self.tray_icon:
+                self.tray_icon.stop()
+            self.root.destroy()
+
+    def start_connection(self):
+        """开始连接"""
+        broadband_user = self.account_entry.get().strip()
+        broadband_pass = self.password_entry.get().strip()
+
+        if not broadband_user or not broadband_pass:
+            messagebox.showwarning("提示", "请输入宽带账号和密码")
+            return
+
+        # 保存账号密码
+        self.saved_account = broadband_user
+        self.saved_password = broadband_pass
+
         # 禁用按钮
-        self.update_button("disconnect", tk.DISABLED, "正在断开...")
-        self.update_button("connect", tk.DISABLED)
+        self.update_button("connect", tk.DISABLED, "正在连接...")
+        self.update_button("disconnect", tk.DISABLED)
 
-        # 在新线程中执行断开操作
-        thread = threading.Thread(target=self.run_disconnect)
+        # 在新线程中执行连接
+        thread = threading.Thread(target=self.run_connection, args=(broadband_user, broadband_pass))
         thread.daemon = True
         thread.start()
 
-    def run_disconnect(self):
-        """执行断开逻辑（HTTP API 版本）"""
-        disconnect_success = False
-        try:
-            self.log("[INFO] 开始执行断开和清除流程...")
-
-            # 更新进度：初始化
-            self.update_progress(10, "正在连接路由器...")
-
-            # 创建 HTTP 清理器
-            self.cleaner = TPLinkHTTPCleaner(self.router_ip, self.router_password)
-
-            # 替换日志方法
-            self.cleaner._log = lambda msg: self.log(msg)
-
-            # 执行清理流程
-            disconnect_success = self.cleaner.run_cleanup()
-
-            if disconnect_success:
-                self.log("[SUCCESS] 断开并清除成功！")
-                self.update_status("已断开并清除", "green")
-                self.update_progress(100, "完成！")
-            else:
-                self.log("[ERROR] 断开并清除失败")
-                self.update_status("操作失败", "red")
-
-        except Exception as e:
-            self.log(f"[ERROR] 断开时发生错误: {e}")
-            import traceback
-            self.log(traceback.format_exc())
-            disconnect_success = False
-
-        # 恢复按钮状态
-        self.log("[INFO] 正在恢复按钮状态...")
-        self.update_button("disconnect", tk.NORMAL, "断开并清除")
-        self.update_button("connect", tk.NORMAL)
-        self.stop_progress()
-
-        # 清除保存的账号密码
-        self.saved_account = ""
-        self.saved_password = ""
-
-        return disconnect_success
-
-    def reconnect(self):
-        """重新连接"""
-        # 弹出对话框获取宽带账号密码
-        dialog = tk.Toplevel(self.root)
-        dialog.title("宽带账号")
-        dialog.geometry("400x250")
-        dialog.resizable(False, False)
-
-        # 居中显示
-        dialog.transient(self.root)
-        dialog.grab_set()
-
-        # 账号输入
-        ttk.Label(dialog, text="宽带账号:").pack(pady=(20, 5))
-        account_entry = ttk.Entry(dialog, width=40)
-        account_entry.pack(pady=5)
-        if self.saved_account:
-            account_entry.insert(0, self.saved_account)
-
-        # 密码输入
-        ttk.Label(dialog, text="宽带密码:").pack(pady=(10, 5))
-        password_entry = ttk.Entry(dialog, width=40, show="*")
-        password_entry.pack(pady=5)
-        if self.saved_password:
-            password_entry.insert(0, self.saved_password)
-
-        # 结果变量
-        result = {'confirmed': False, 'account': '', 'password': ''}
-
-        def on_confirm():
-            result['account'] = account_entry.get().strip()
-            result['password'] = password_entry.get().strip()
-            result['confirmed'] = True
-            dialog.destroy()
-
-        def on_cancel():
-            dialog.destroy()
-
-        # 按钮
-        button_frame = ttk.Frame(dialog)
-        button_frame.pack(pady=20)
-        ttk.Button(button_frame, text="连接", command=on_confirm, width=10).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="取消", command=on_cancel, width=10).pack(side=tk.LEFT, padx=5)
-
-        # 等待对话框关闭
-        self.root.wait_window(dialog)
-
-        if result['confirmed'] and result['account'] and result['password']:
-            # 保存账号密码
-            self.saved_account = result['account']
-            self.saved_password = result['password']
-
-            # 禁用按钮
-            self.update_button("disconnect", tk.DISABLED)
-            self.update_button("connect", tk.DISABLED, "正在连接...")
-
-            # 在新线程中执行连接
-            thread = threading.Thread(target=self.run_connection, args=(result['account'], result['password']))
-            thread.daemon = True
-            thread.start()
-        else:
-            self.log("[INFO] 连接已取消")
+        # 更新托盘图标为"连接中"
+        self.update_tray_icon("connecting")
 
     def run_connection(self, broadband_user, broadband_pass):
         """执行连接逻辑"""
         connection_success = False
+        ip_address = None  # 声明IP地址变量
         try:
-            self.log("=" * 60)
+            self.log("=" * 50)
             self.log("开始执行路由器连接流程...")
             self.log(f"账号: {broadband_user}")
             self.log(f"密码: {'*' * len(broadband_pass)}")
-            self.log("=" * 60)
+            self.log("=" * 50)
 
             # 更新进度：初始化
             self.update_progress(10, "正在连接路由器...")
-            self.update_status("正在连接...")
+            self.update_status("正在连接...", "#4CAF50")
 
             # 创建 HTTP 清理器
             self.cleaner = TPLinkHTTPCleaner(self.router_ip, self.router_password)
@@ -381,18 +683,12 @@ class RouterLoginGUI:
                 self.update_status("登录失败", "red")
                 return
 
-            # 2. 设置MAC地址（如果配置了）
-            mac_mode = self.config_manager.get_config().get("mac_mode", "router")
-            self.update_progress(30, "正在设置MAC地址...")
-
-            if mac_mode == 'random':
-                self.log("[INFO] MAC模式: 随机MAC")
-                self.cleaner.set_mac_address('random')
-            elif mac_mode == 'pc':
-                self.log("[INFO] MAC模式: PC MAC")
-                self.cleaner.set_mac_address('pc')
-            else:
-                self.log("[INFO] MAC模式: 路由器默认")
+            # 2. 设置随机MAC地址
+            self.update_progress(30, "正在设置随机MAC地址...")
+            if not self.cleaner.set_mac_address():
+                self.log("[ERROR] 设置MAC地址失败")
+                self.update_status("设置失败", "red")
+                return
 
             # 3. 设置PPPoE账号密码
             self.update_progress(50, "正在设置账号密码...")
@@ -408,11 +704,10 @@ class RouterLoginGUI:
                 self.update_status("连接失败", "red")
                 return
 
-            # 5. 等待连接建立（检查IP地址）
+            # 5. 等待连接建立
             self.update_progress(80, "正在等待IP分配...")
             self.log("[INFO] 等待IP地址分配（15秒）...")
-            import time as time_module
-            time_module.sleep(15)
+            time.sleep(15)
 
             # 6. 检查连接状态
             self.update_progress(90, "正在验证连接...")
@@ -424,16 +719,17 @@ class RouterLoginGUI:
                 self.log(f"[INFO] WAN IP地址: {ip_address}")
 
                 if ip_address and ip_address != "0.0.0.0" and ip_address != "":
-                    self.log("=" * 60)
+                    self.log("=" * 50)
                     self.log("[SUCCESS] 连接成功！")
                     self.log(f"已获取IP地址: {ip_address}")
-                    self.log("=" * 60)
+                    self.log("=" * 50)
                     connection_success = True
-                    self.update_status(f"已连接 IP: {ip_address}", "green")
+                    self.update_status(f"已连接 IP: {ip_address}", "#4CAF50")
                     self.update_progress(100, "连接成功！")
                 else:
                     self.log("[WARNING] 未获取到有效IP地址")
                     self.update_status("连接失败", "orange")
+                    ip_address = None  # 重置IP地址
             else:
                 self.log("[WARNING] 无法获取连接状态")
                 self.update_status("状态未知", "orange")
@@ -447,17 +743,94 @@ class RouterLoginGUI:
         # 恢复按钮状态
         self.log("[INFO] 正在恢复按钮状态...")
         if connection_success:
-            self.update_button("disconnect", tk.NORMAL, "断开并清除")
+            self.update_button("disconnect", tk.NORMAL, "断开连接")
             self.update_button("connect", tk.DISABLED, "已连接")
+
+            # 更新托盘图标为"在线"（带IP地址）
+            self.update_tray_icon("online", ip_address)
         else:
-            self.update_button("disconnect", tk.NORMAL, "断开并清除")
-            self.update_button("connect", tk.NORMAL, "重新连接")
+            self.update_button("disconnect", tk.NORMAL, "断开连接")
+            self.update_button("connect", tk.NORMAL, "开始连接")
+
+            # 更新托盘图标为"错误"（连接失败）
+            self.update_tray_icon("error")
         self.stop_progress()
 
         return connection_success
 
-    def show_reconfig_dialog(self):
-        """显示重新配置对话框（隐藏功能）"""
+    def disconnect_and_clear(self):
+        """断开并清除账号密码"""
+        # 禁用按钮
+        self.update_button("connect", tk.DISABLED)
+        self.update_button("disconnect", tk.DISABLED, "正在断开...")
+
+        # 在新线程中执行断开操作
+        thread = threading.Thread(target=self.run_disconnect)
+        thread.daemon = True
+        thread.start()
+
+        # 更新托盘图标为"连接中"
+        self.update_tray_icon("connecting")
+
+    def run_disconnect(self):
+        """执行断开逻辑"""
+        disconnect_success = False
+        try:
+            self.log("=" * 50)
+            self.log("开始执行路由器账号清理...")
+            self.log("=" * 50)
+
+            # 更新进度：初始化
+            self.update_progress(10, "正在连接路由器...")
+            self.update_status("正在清理...", "#FF9800")
+
+            # 创建 HTTP 清理器
+            self.cleaner = TPLinkHTTPCleaner(self.router_ip, self.router_password)
+
+            # 替换日志方法
+            self.cleaner._log = lambda msg: self.log(msg)
+
+            # 执行清理流程
+            disconnect_success = self.cleaner.run_cleanup()
+
+            if disconnect_success:
+                self.log("[SUCCESS] 清理完成！")
+                self.update_status("已断开并清除", "#4CAF50")
+                self.update_progress(100, "完成！")
+            else:
+                self.log("[ERROR] 清理失败")
+                self.update_status("操作失败", "red")
+
+        except Exception as e:
+            self.log(f"[ERROR] 断开时发生错误: {e}")
+            import traceback
+            self.log(traceback.format_exc())
+            disconnect_success = False
+
+        # 恢复按钮状态
+        self.log("[INFO] 正在恢复按钮状态...")
+        self.update_button("connect", tk.NORMAL, "开始连接")
+        self.update_button("disconnect", tk.NORMAL, "断开连接")
+
+        # 更新托盘图标为"离线"（断开成功）
+        if disconnect_success:
+            self.update_tray_icon("offline")
+
+        self.stop_progress()
+
+        # 清除保存的账号密码
+        self.saved_account = ""
+        self.saved_password = ""
+
+        return disconnect_success
+
+    def stop_progress(self):
+        """停止进度条"""
+        self.progress_var.set(0)
+        self.progress_label.config(text="")
+
+    def show_settings(self):
+        """显示设置对话框（双击标题触发）"""
         dialog = tk.Toplevel(self.root)
         dialog.title("路由器设置")
         dialog.geometry("500x500")
@@ -470,9 +843,6 @@ class RouterLoginGUI:
         x = self.root.winfo_x() + (self.root.winfo_width() // 2) - (500 // 2)
         y = self.root.winfo_y() + (self.root.winfo_height() // 2) - (500 // 2)
         dialog.geometry(f"+{x}+{y}")
-
-        # 结果存储
-        result = {'saved': False}
 
         # 标题
         title_label = tk.Label(dialog, text="路由器配置", font=("Arial", 14, "bold"))
@@ -501,26 +871,14 @@ class RouterLoginGUI:
         separator_frame = tk.Frame(dialog, height=2, bg="#CCCCCC")
         separator_frame.pack(pady=10, padx=30, fill=tk.X)
 
-        # MAC地址模式
-        mac_frame = tk.Frame(dialog)
-        mac_frame.pack(pady=5, padx=30, fill=tk.X)
-        tk.Label(mac_frame, text="MAC地址模式:", font=("Arial", 10)).pack(anchor=tk.W, pady=(0, 5))
-
-        mac_mode_value = current_config.get('mac_mode', 'router')
-        mac_mode_mapping = {
-            'router': "使用路由器的MAC地址",
-            'pc': "使用当前管理PC的MAC地址",
-            'random': "使用随机MAC地址"
-        }
-        mac_mode_var = tk.StringVar(value=mac_mode_mapping.get(mac_mode_value, "使用路由器的MAC地址"))
-        mac_mode_combobox = ttk.Combobox(
-            mac_frame,
-            textvariable=mac_mode_var,
-            values=list(mac_mode_mapping.values()),
-            state="readonly",
-            width=40
+        # 说明文字
+        info_label = tk.Label(
+            dialog,
+            text="提示：程序将自动使用随机MAC地址",
+            font=("Arial", 9),
+            fg="#666666"
         )
-        mac_mode_combobox.pack(fill=tk.X, pady=(0, 10))
+        info_label.pack(pady=10)
 
         # 错误提示
         error_label = tk.Label(dialog, text="", font=("Arial", 9), fg="red")
@@ -553,24 +911,15 @@ class RouterLoginGUI:
             new_config = {
                 'router_ip': router_ip,
                 'router_password': router_password,
-                'mac_mode': 'router',
                 'version': '1.0'
             }
 
-            # 转换MAC模式
-            mac_mode_text = mac_mode_var.get()
-            for mode, text in mac_mode_mapping.items():
-                if text == mac_mode_text:
-                    new_config['mac_mode'] = mode
-                    break
-
             if self.config_manager.save_config(new_config):
-                result['saved'] = True
-                messagebox.showinfo("成功", "配置保存成功！", parent=dialog)
-                dialog.destroy()
                 # 更新配置
                 self.router_ip = router_ip
                 self.router_password = router_password
+                messagebox.showinfo("成功", "配置保存成功！", parent=dialog)
+                dialog.destroy()
             else:
                 error_label.config(text="保存配置失败")
 
@@ -580,67 +929,6 @@ class RouterLoginGUI:
 
         tk.Button(button_frame, text="保存", command=validate_and_save, width=10).pack(side=tk.LEFT, padx=5)
         tk.Button(button_frame, text="取消", command=dialog.destroy, width=10).pack(side=tk.LEFT, padx=5)
-
-    def show_about(self):
-        """显示关于对话框"""
-        about_text = """
-TP-Link 宽带拨号助手 (HTTP API 版本)
-
-版本: 2.0
-特点: 不使用浏览器，直接通过HTTP API操作路由器
-
-功能:
-- 宽带拨号连接
-- 自动清理账号（关机时）
-- MAC地址随机化
-- 操作日志记录
-
-隐藏功能（右键点击状态栏）:
-- 路由器设置 (Ctrl+R)
-- 查看日志 (Ctrl+L)
-
-提示:
-- 首次运行会显示配置向导
-- 配置保存在: ~/.tplink_dialer/config.json
-"""
-        messagebox.showinfo("关于", about_text.strip())
-
-    def show_log_window(self):
-        """显示日志窗口（隐藏功能）"""
-        log_window = tk.Toplevel(self.root)
-        log_window.title("操作日志")
-        log_window.geometry("700x500")
-
-        # 居中显示
-        log_window.update_idletasks()
-        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - (700 // 2)
-        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - (500 // 2)
-        log_window.geometry(f"+{x}+{y}")
-
-        # 工具栏
-        toolbar = tk.Frame(log_window)
-        toolbar.pack(fill=tk.X, padx=5, pady=5)
-
-        tk.Button(toolbar, text="清空日志", command=self.clear_log).pack(side=tk.LEFT, padx=2)
-        tk.Button(toolbar, text="关闭", command=log_window.destroy).pack(side=tk.RIGHT, padx=2)
-
-        # 日志文本框
-        log_text = scrolledtext.ScrolledText(
-            log_window,
-            height=20,
-            font=("Consolas", 9)
-        )
-        log_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-
-        # 复制当前日志
-        current_log = self.log_text.get(1.0, tk.END)
-        log_text.insert(1.0, current_log)
-        log_text.config(state=tk.DISABLED)
-
-    def quit_app(self):
-        """退出应用"""
-        if messagebox.askyesno("确认退出", "确定要退出吗？"):
-            self.root.destroy()
 
 
 # ========== 配置向导 ==========
@@ -710,17 +998,17 @@ def show_config_wizard():
     password_entry = tk.Entry(password_frame, font=("Arial", 10), width=25, show="●")
     password_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
 
-    # MAC地址模式说明
-    mac_frame = tk.Frame(wizard_root)
-    mac_frame.pack(pady=5, padx=40, fill=tk.X)
+    # 说明文字
+    info_frame = tk.Frame(wizard_root)
+    info_frame.pack(pady=10, padx=40, fill=tk.X)
 
-    mac_label = tk.Label(
-        mac_frame,
-        text="💡 MAC地址模式：使用路由器默认MAC（可在设置中修改）",
-        font=("Arial", 8),
-        fg="#999999"
+    info_label = tk.Label(
+        info_frame,
+        text="说明：程序将自动使用随机MAC地址连接网络",
+        font=("Arial", 9),
+        fg="#666666"
     )
-    mac_label.pack()
+    info_label.pack()
 
     # 状态提示
     status_label = tk.Label(
@@ -785,7 +1073,6 @@ def show_config_wizard():
         config = {
             'router_ip': router_ip,
             'router_password': router_password,
-            'mac_mode': 'router',
             'version': '1.0'
         }
 
@@ -847,7 +1134,7 @@ def show_config_wizard():
     # 底部提示
     footer_label = tk.Label(
         wizard_root,
-        text="提示：配置可在程序设置中随时修改",
+        text="提示：配置可在程序设置中随时修改（双击标题打开设置）",
         font=("Arial", 8),
         fg="#999999"
     )
@@ -918,35 +1205,37 @@ def main():
 
     # 窗口关闭事件
     def on_closing():
-        if messagebox.askyesno("确认退出", "确定要退出吗？"):
+        # 如果有托盘图标，隐藏到托盘
+        if TRAY_AVAILABLE and app.tray_icon:
+            app.hide_to_tray()
+            return
+
+        # 直接关闭窗口
+        if app.saved_account:
+            if messagebox.askyesno("确认退出", "检测到已保存的宽带账号。\n\n确定要退出吗？"):
+                # 停止托盘图标
+                if app.tray_icon:
+                    app.tray_icon.stop()
+                root.destroy()
+        else:
+            # 停止托盘图标
+            if app.tray_icon:
+                app.tray_icon.stop()
             root.destroy()
 
     root.protocol("WM_DELETE_WINDOW", on_closing)
 
-    # 绑定隐藏功能的快捷键
-    # Ctrl+R: 重新配置路由器
-    def show_reconfig(event=None):
-        app.show_reconfig_dialog()
+    # 监听窗口最小化事件
+    def on_iconify():
+        # 如果窗口被最小化，隐藏到托盘
+        if root.state() == 'iconic':
+            if TRAY_AVAILABLE and app.tray_icon:
+                # 延迟一小段时间后隐藏窗口，确保最小化动画完成
+                root.after(100, app.hide_to_tray)
+            else:
+                app.log("提示: 系统托盘功能不可用，窗口保持可见")
 
-    root.bind('<Control-r>', show_reconfig)
-
-    # Ctrl+L: 显示日志窗口
-    def show_log(event=None):
-        app.show_log_window()
-
-    root.bind('<Control-l>', show_log)
-
-    # Ctrl+Shift+R: 隐藏的配置重置功能
-    def reset_config(event=None):
-        if messagebox.askyesno("重置配置", "确定要重置所有配置吗？\n\n这将清除路由器信息并退出程序。"):
-            import os
-            config_file = Path(os.environ.get("USERPROFILE", ".")) / ".tplink_dialer" / "config.json"
-            if config_file.exists():
-                config_file.unlink()
-            messagebox.showinfo("重置成功", "配置已重置，下次启动将显示配置向导。")
-            root.destroy()
-
-    root.bind('<Control-Shift-R>', reset_config)
+    root.bind('<Unmap>', lambda e: on_iconify())
 
     # 运行主循环
     root.mainloop()

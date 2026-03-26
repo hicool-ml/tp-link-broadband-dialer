@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dist/TPLinkCleanupService.exe remove:*)",
+      "Bash(dist/TPLinkCleanupService.exe install:*)",
+      "Bash(sc delete:*)",
+      "Bash(powershell -Command \":*)",
+      "Bash(reg query:*)",
+      "Bash(copy /Y cleanup.bat \"C:\\\\Program Files \\(x86\\)\\\\Broadband_Dialer\\\\cleanup.bat\")",
+      "Bash(cmd /c \"copy /Y cleanup.bat \"\"C:\\\\Program Files \\(x86\\)\\\\Broadband_Dialer\\\\cleanup.bat\"\"\")",
+      "Bash(powershell -Command \"Copy-Item -Path ''cleanup.bat'' -Destination ''C:\\\\Program Files \\(x86\\)\\\\Broadband_Dialer\\\\cleanup.bat'' -Force\")",
+      "Bash(powershell -Command \"gpupdate /Force\")",
+      "Bash(powershell -Command \"Get-Content ''C:\\\\ProgramData\\\\BroadbandDialer\\\\cleanup.log'' -Tail 10\")",
+      "Bash(pyinstaller --onefile --clean --noconfirm cleanup_http.py)",
+      "Bash(python -m PyInstaller --onefile --clean --noconfirm cleanup_http.py)",
+      "Bash(\"C:\\\\Program Files \\(x86\\)\\\\NSIS\\\\makensis.exe\" setup_v5_final.nsi)",
+      "Bash(\"C:\\\\Program Files \\(x86\\)\\\\NSIS\\\\makensis.exe\" setup_v3_runonce.nsi)",
+      "Bash(python -c \":*)",
+      "Bash(powershell -Command \"\\(Get-Item ''Broadband_Dialer_Setup_v3.0.0.exe''\\).LastWriteTime\")",
+      "Bash(python -m PyInstaller --onefile --clean --noconfirm build_main.spec)",
+      "Bash(python -m PyInstaller --clean --noconfirm build_main.spec)",
+      "Read(//d/13jiao/**)",
+      "Bash(python -m PyInstaller broadband_dialer_http.py --onefile --name broadband_dialer --clean --noconfirm)",
+      "Bash(ls -lh Release_v3.0.0/*.exe)",
+      "Bash(git add:*)"
+    ]
+  }
+}

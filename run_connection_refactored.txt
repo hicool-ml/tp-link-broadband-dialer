@@ -1,0 +1,95 @@
+    def run_connection(self, broadband_user, broadband_pass):
+        """执行连接逻辑（重构后的主流程）"""
+        self.log("=" * 50)
+        self.log("开始执行路由器登录流程...")
+        self.log(f"账号: {broadband_user}")
+        self.log(f"密码: {'*' * len(broadband_pass)}")
+        self.log("=" * 50)
+
+        try:
+            # 使用生成器管理浏览器生命周期
+            for browser, page, captured_stok in self._launch_browser_with_context():
+                # 步骤1: 登录路由器
+                if not self._login_router(page, captured_stok):
+                    self.update_button("connect", tk.NORMAL, "开始连接")
+                    self.update_status("登录失败")
+                    self.stop_progress()
+                    self.log_queue.put("[SHOW_ERROR]登录失败，请检查路由器管理员密码是否正确")
+                    return
+
+                # 步骤2: 导航到上网设置页
+                if not self._navigate_to_internet_settings(page):
+                    self.update_button("connect", tk.NORMAL, "开始连接")
+                    self.update_status("配置失败")
+                    self.stop_progress()
+                    self.log_queue.put("[SHOW_ERROR]无法打开上网设置，请检查路由器是否正常工作")
+                    return
+
+                # 步骤3: 设置MAC地址
+                config_manager = ConfigManager()
+                config = config_manager.get_config()
+                mac_mode = config.get('mac_mode', 'router')
+                self.set_mac_mode(page, mac_mode)
+
+                # 步骤4: 填写拨号账号
+                self._fill_broadband_account(page, broadband_user, broadband_pass)
+
+                # 步骤5: 尝试拨号（最多3次）
+                max_attempts = 3
+                connection_success = False
+
+                for attempt in range(1, max_attempts + 1):
+                    self.log(f"🔄 第{attempt}次尝试连接...")
+
+                    if not self._start_dialing(page):
+                        if attempt < max_attempts:
+                            time.sleep(2)
+                            continue
+                        else:
+                            break
+
+                    self.log("⏳ 正在等待拨号完成（10秒）...")
+                    self.log("   等待IP地址分配和连接建立...")
+                    time.sleep(10)
+
+                    self.update_status(f"正在验证连接（第{attempt}次）...")
+
+                    try:
+                        ip_address = self._check_connection_status(page)
+                        if ip_address:
+                            self._handle_connection_success(ip_address)
+                            connection_success = True
+                            return
+                        else:
+                            if attempt < max_attempts:
+                                self.log(f"⚠️ 拨号未成功，准备重试...")
+                                time.sleep(2)
+                            else:
+                                self.log("⚠️ 多次尝试后仍无法获取有效IP")
+                    except Exception as e:
+                        if attempt < max_attempts:
+                            self.log(f"⚠️ 验证连接时出错，准备重试...")
+                            time.sleep(2)
+
+                # 所有尝试都失败
+                if not connection_success:
+                    self._handle_connection_failure()
+
+        except Exception as e:
+            self.log(f"❌ 发生错误: {e}")
+            self.update_status("发生错误")
+            error_msg = f"发生错误：{e}\n\n请检查：\n• 路由器是否正常工作\n• 网络连接是否正常\n• 程序是否有足够的权限"
+            self.log_queue.put(f"[SHOW_ERROR]{error_msg}")
+
+        # 恢复按钮状态和清理
+        self.log("🔄 正在恢复按钮状态...")
+        self.update_button("connect", tk.NORMAL, "开始连接")
+        self.update_button("disconnect", tk.NORMAL)
+        self.stop_progress()
+        self.log("✅ 按钮状态已恢复")
+
+        self.update_tray_icon("error")
+
+        self.saved_account = ""
+        self.saved_password = ""
+        self.log("✅ 已清除保存的账号密码，可以重新连接")

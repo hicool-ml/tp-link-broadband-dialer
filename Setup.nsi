@@ -4,9 +4,9 @@
 !include "MUI2.nsh"
 
 ; Installer Configuration
-Name "Broadband Dial Tool v2.1"
+Name "Broadband Dial Tool v2.1.1"
 OutFile "Release\Setup.exe"
-InstallDir "$PROGRAMFILES\TPLinkDialer"
+InstallDir "$PROGRAMFILES64\TPLinkDialer"
 InstallDirRegKey HKLM "Software\TPLinkDialer" "InstallPath"
 RequestExecutionLevel admin
 
@@ -15,12 +15,12 @@ SetCompressor /SOLID lzma
 SetCompressorDictSize 32
 
 ; Version Info
-VIProductVersion "2.1.0.0"
+VIProductVersion "2.1.1.0"
 VIAddVersionKey "ProductName" "Broadband Dial Tool"
 VIAddVersionKey "CompanyName" "Kilo Code"
 VIAddVersionKey "FileDescription" "TP-Link Broadband Dial Tool Installer"
-VIAddVersionKey "FileVersion" "2.1.0.0"
-VIAddVersionKey "ProductVersion" "2.1.0.0"
+VIAddVersionKey "FileVersion" "2.1.1.0"
+VIAddVersionKey "ProductVersion" "2.1.1.0"
 VIAddVersionKey "LegalCopyright" "2026"
 
 ; Pages
@@ -33,6 +33,9 @@ VIAddVersionKey "LegalCopyright" "2026"
 ; Finish Page
 !define MUI_FINISHPAGE_RUN "$INSTDIR\TP-Link_Dialer.exe"
 !define MUI_FINISHPAGE_RUN_TEXT "Launch Broadband Dial Tool"
+!define MUI_FINISHPAGE_SHOWREADME
+!define MUI_FINISHPAGE_SHOWREADME_TEXT "View Service Status"
+!define MUI_FINISHPAGE_SHOWREADME_FUNCTION ShowServiceStatus
 !insertmacro MUI_PAGE_FINISH
 
 ; Uninstall Pages
@@ -43,6 +46,11 @@ VIAddVersionKey "LegalCopyright" "2026"
 
 ; Language
 !insertmacro MUI_LANGUAGE "English"
+
+; Function to show service status after installation
+Function ShowServiceStatus
+  ExecShell "sc" "query TPLinkShutdownCleanup" SW_SHOW
+FunctionEnd
 
 ; Installer Sections
 Section "Main Program" SecMain
@@ -73,14 +81,19 @@ SectionEnd
 Section "Cleanup Service" SecService
     SetOutPath $INSTDIR
 
-    ; Install cleanup service
-    File /r "dist\CleanupService\*"
+    ; Install cleanup service scripts
+    File "CleanupService.py"
+    File "config_manager.py"
+    File "browser_manager.py"
 
-    ; Install service installer
-    File "dist\ServiceInstaller.exe"
+    ; Install cleanup worker executable
+    File "dist\cleanup_worker.exe"
+
+    ; Install portable Python runtime
+    File /r "python"
 
     ; Write service registry
-    WriteRegStr HKLM "Software\TPLinkDialer" "CleanupService" "$INSTDIR\CleanupService.exe"
+    WriteRegStr HKLM "Software\TPLinkDialer" "CleanupService" "$INSTDIR\CleanupService.py"
 
 SectionEnd
 
@@ -102,13 +115,37 @@ SectionEnd
 
 ; Post-install
 Section "-PostInstall"
-    ; Install service if selected
-    IfFileExists "$INSTDIR\CleanupService.exe" 0 +2
-    ExecWait '"$INSTDIR\CleanupService.exe" install'
+    ; Install and start service if selected
+    IfFileExists "$INSTDIR\CleanupService.py" 0 no_service
+        DetailPrint "=========================================="
+        DetailPrint "Installing cleanup service..."
+        DetailPrint "=========================================="
 
-    ; Start service
-    IfFileExists "$INSTDIR\CleanupService.exe" 0 +2
-    ExecWait 'net start TPLinkShutdownCleanup'
+        ; Install service using portable Python
+        ExecWait '"$INSTDIR\python\python.exe" "$INSTDIR\CleanupService.py" install' $0
+        DetailPrint "Service install result: $0"
+
+        ; Start service
+        DetailPrint "Starting cleanup service..."
+        ExecWait 'net start TPLinkShutdownCleanup' $1
+        DetailPrint "Service start result: $1"
+
+        ; Verify service status
+        nsExec::ExecToLog 'sc query TPLinkShutdownCleanup'
+        Pop $2
+
+        DetailPrint "=========================================="
+        DetailPrint "Service installation completed!"
+        DetailPrint "The service will automatically clear your router"
+        DetailPrint "account when Windows shuts down."
+        DetailPrint "=========================================="
+
+        MessageBox MB_OK "Cleanup service has been installed and started.$\n$\nThis service will automatically clear your router account on Windows shutdown, preventing ISP account locking due to frequent reboots.$\n$\nYou can check the service status in Windows Services (TPLinkShutdownCleanup)."
+
+        Goto done
+    no_service:
+        DetailPrint "Cleanup service not selected (skipped)"
+    done:
 SectionEnd
 
 ; Uninstaller Section
@@ -134,8 +171,8 @@ Section "Uninstall"
 
     ; Remove the service
     DetailPrint "Removing cleanup service..."
-    IfFileExists "$INSTDIR\CleanupService.exe" 0 service_removed
-    ExecWait '"$INSTDIR\CleanupService.exe" remove' $0
+    IfFileExists "$INSTDIR\CleanupService.py" 0 service_removed
+    ExecWait '"$INSTDIR\python\python.exe" "$INSTDIR\CleanupService.py" remove' $0
     DetailPrint "Service remove result: $0"
     Sleep 2000
 
@@ -213,9 +250,9 @@ Section "Uninstall"
 SectionEnd
 
 ; Component Descriptions
-LangString DESC_SecMain ${LANG_English} "Broadband dial main program"
-LangString DESC_SecService ${LANG_English} "Background cleanup service (auto clear router account on shutdown)"
-LangString DESC_SecBrowser ${LANG_English} "Playwright browser component (required)"
+LangString DESC_SecMain ${LANG_English} "Main dial program with GUI interface"
+LangString DESC_SecService ${LANG_English} "Shutdown cleanup service (Recommended: Automatically clears router account on Windows shutdown to prevent account locking)"
+LangString DESC_SecBrowser ${LANG_English} "Embedded browser (Required for router communication)"
 
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
     !insertmacro MUI_DESCRIPTION_TEXT ${SecMain} $(DESC_SecMain)
