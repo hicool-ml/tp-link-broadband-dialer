@@ -22,7 +22,16 @@
       "Read(//d/13jiao/**)",
       "Bash(python -m PyInstaller broadband_dialer_http.py --onefile --name broadband_dialer --clean --noconfirm)",
       "Bash(ls -lh Release_v3.0.0/*.exe)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git config:*)",
+      "Bash(gh --version)",
+      "Bash(git remote:*)",
+      "Bash(GIT_SSH_COMMAND=\"ssh -o ConnectTimeout=30\" git push origin main)",
+      "Bash(gh auth:*)",
+      "Bash(gh repo:*)",
+      "Bash(gh release:*)"
     ]
   }
 }

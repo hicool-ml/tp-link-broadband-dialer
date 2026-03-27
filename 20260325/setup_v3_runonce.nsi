@@ -77,6 +77,9 @@ DetailPrint "  ✓ broadband_dialer.exe"
 File "/oname=cleanup_http.exe" "dist\cleanup_http.exe"
 DetailPrint "  ✓ cleanup_http.exe"
 
+File "/oname=cleanup_guard.exe" "dist\cleanup_guard.exe"
+DetailPrint "  ✓ cleanup_guard.exe (关机守护进程)"
+
 File "/oname=cleanup.ps1" "cleanup.ps1"
 DetailPrint "  ✓ cleanup.ps1"
 
@@ -114,22 +117,24 @@ WriteUninstaller "$INSTDIR\uninstall.exe"
 DetailPrint "  ✓ 卸载信息已注册"
 
 ; ============================================
-; 注册 RunOnce 清理机制（核心功能）
+; ✅ 注册关机守护进程（开机自启）
 ; ============================================
 DetailPrint ""
 DetailPrint "========================================"
-DetailPrint "  注册 RunOnce 清理机制"
+DetailPrint "  注册关机守护进程"
 DetailPrint "========================================"
-DetailPrint "正在注册 RunOnce 清理任务..."
-DetailPrint "  • 机制：下次启动自动执行路由器清理"
-DetailPrint "  • 触发：关机/重启/注销前自动注册"
-DetailPrint "  • 执行：下次开机时自动运行"
+DetailPrint "正在注册开机自启动..."
+WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Run" "BroadbandDialerGuard" "$INSTDIR\cleanup_guard.exe"
+DetailPrint "  ✓ 开机自启已注册"
 
-ExecWait 'powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File "$INSTDIR\cleanup.ps1"'
+DetailPrint "正在启动守护进程..."
+ExecWait '"$INSTDIR\cleanup_guard.exe"'
+DetailPrint "  ✓ 守护进程已启动"
 
 DetailPrint ""
-DetailPrint "✓ RunOnce 清理机制已激活！"
-DetailPrint "✓ 下次启动时将自动清理路由器"
+DetailPrint "✓ 关机守护机制已激活！"
+DetailPrint "✓ 守护进程将在后台监听关机信号"
+DetailPrint "✅ 收到关机信号时自动清理路由器（网络卸载前）"
 DetailPrint ""
 DetailPrint "========================================"
 DetailPrint ""
@@ -146,6 +151,23 @@ DetailPrint "========================================"
 DetailPrint "  开始卸载 TP-Link 宽带拨号助手"
 DetailPrint "========================================"
 DetailPrint ""
+
+; ============================================
+; 停止守护进程
+; ============================================
+DetailPrint "正在停止关机守护进程..."
+DeleteRegValue HKLM "Software\Microsoft\Windows\CurrentVersion\Run" "BroadbandDialerGuard"
+DetailPrint "  ✓ 已删除开机自启"
+
+; 尝试优雅停止进程
+DetailPrint "正在停止守护进程（如果运行中）..."
+nsExec::ExecToStack 'taskkill /F /IM cleanup_guard.exe'
+Pop $0
+${If} $0 == "0"
+  DetailPrint "  ✓ 守护进程已停止"
+${Else}
+  DetailPrint "  ℹ️  守护进程未运行"
+${EndIf}
 
 ; ============================================
 ; 删除 RunOnce 注册表项
@@ -175,6 +197,9 @@ DetailPrint "  ✓ broadband_dialer.exe 已删除"
 
 Delete "$INSTDIR\cleanup_http.exe"
 DetailPrint "  ✓ cleanup_http.exe 已删除"
+
+Delete "$INSTDIR\cleanup_guard.exe"
+DetailPrint "  ✓ cleanup_guard.exe 已删除"
 
 Delete "$INSTDIR\cleanup.ps1"
 DetailPrint "  ✓ cleanup.ps1 已删除"
